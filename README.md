@@ -1,6 +1,6 @@
-# The Brickcraft Modding & Development Guide
+# The Brickcraft Modding & Development ReadMe
 
-This comprehensive guide serves as the definitive source of truth for the Brickcraft prototype, detailing the full extent and limitations of its modding capabilities.
+This readme serves as the definitive source of truth for the Brickcraft prototype, detailing the full extent and limitations of its modding capabilities.
 
 ## 1. Executive Summary
 

@@ -1,4 +1,4 @@
-# Brickcraft Modding & Development Guide (Unified Edition)
+# Brickcraft Modding & Development Guide
 
 This document summarizes all known discoveries, techniques, and challenges related to modding the **Brickcraft prototype (circa 2012)** using Lua scripting and reverse engineering.
 

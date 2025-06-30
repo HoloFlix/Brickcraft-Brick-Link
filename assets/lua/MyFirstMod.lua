@@ -40,3 +40,15 @@ function fly(connector)
         connector:Print("Flight PERMANENTLY ENABLED for this session.")
     end
 end
+
+-- --- Final, Stable Commands ---
+
+-- The shockwave command is a one-way action. Once entered every player is pushed up and will continuously bounce.
+--AddMyModCommand("shockwave", "Pushes ALL players gently into the air.", 0, ServerCommand.SecurityLevel0)
+--function shockwave(connector)
+    --local pushForce = Vector3(0, 3.0, 0) 
+    --for p in EntityManager.Players do
+        --p:PushPlayer(pushForce)
+    --end
+    --connector:Print("A gentle puff of air ripples through the server!")
+--end

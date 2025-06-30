@@ -41,7 +41,7 @@ function fly(connector)
     end
 end
 
--- --- Final, Stable Commands ---
+-- --- Inactive, Unstable Commands ---
 
 -- The shockwave command is a one-way action. Once entered every player is pushed up and will continuously bounce.
 --AddMyModCommand("shockwave", "Pushes ALL players gently into the air.", 0, ServerCommand.SecurityLevel0)

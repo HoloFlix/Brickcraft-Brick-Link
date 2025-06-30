@@ -22,16 +22,16 @@ Our research has confirmed four fundamental principles that govern all Lua moddi
 ### **3. The Definitive (and Final) Lua API**
 This table represents the complete list of reliably working custom functions available to Lua modders. Any function not on this list should be considered inaccessible.
 
-| Object/Class    | Method/Property              | Status     | Notes                                    |
-|:----------------|:-----------------------------|:-----------|:-----------------------------------------|
-| **Player**      | `:PushPlayer(vector)`        | **WORKING**| For applying physical forces.            |
-|                 | `:SetItem(item)`             | **WORKING**| Cannot accept `nil`. Irreversible for the session. |
-|                 | `:GetGuidAsInteger()`        | **WORKING**|                                          |
-|                 | `:GetName()`                 | **WORKING**|                                          |
-| **ServerCmd**   | *(All functions)*            | **WORKING**| The command system is fully functional.    |
-| **EntityManager**| `.Players`                 | **WORKING**| For iterating through connected players. |
-| **Vector3**     | *(All functions)*            | **WORKING**|                                          |
-| **JetPack**     | `JetPack()`                  | **WORKING**| For creating the native JetPack item.      |
+| Object/Class    | Method/Property           | Status                     | Description                                                  |
+|-----------------|---------------------------|----------------------------|--------------------------------------------------------------|
+| Player          | :PushPlayer(vector)       | <font color="green">WORKING</font> | Applies a physical force to the player object.               |
+|                 | :SetItem(item)            | <font color="green">WORKING</font> | Equips a native item (like the global JetPack object) Cannot accept `nil`. Irreversible for the session..       |
+|                 | :GetGuidAsInteger()       | <font color="green">WORKING</font> | Returns the player's unique 64-bit numerical ID.             |
+|                 | :GetName()                | <font color="green">WORKING</font> | Returns the player's name as a string.                       |
+| ServerCmd       | (Various)                 | <font color="green">WORKING</font> | The entire command system (AddCommand, AddAlias, etc.) is functional. |
+| EntityManager   | .Players                  | <font color="green">WORKING</font> | An iterable collection of all currently connected players.   |
+| Vector3         | Vector3(x,y,z) & all math | <font color="green">WORKING</font> | The 3D vector class is fully functional.                     |
+| JetPack         | JetPack() & :Update()     | <font color="green">WORKING</font> | The game's native Jetpack class can be instantiated and its Update method can be overwritten. |
 
 ---
 

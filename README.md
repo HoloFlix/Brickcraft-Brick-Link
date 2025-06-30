@@ -46,12 +46,7 @@ Based on the Unbreakable Rules, we can definitively state that the following mod
 
 ---
 
-### **5. Final Stable Mod: The `/fly` Command**
-The culmination of our research is a single, stable command that works within the engine's hard limits. The `/fly` command permanently equips the player with the native `JetPack`, enabling flight for the rest of their session. This is the most significant and stable gameplay modification possible with Lua.
-
----
-
-### **6. The Future of Brickcraft: Beyond Lua**
+### **5. The Future of Brickcraft: Beyond Lua**
 The Lua discovery phase of this project is complete. For the community to unlock the true potential of the prototype, the next steps must involve C++-level modifications. The path forward is clear:
 
 1.  **Map the Client Network Protocol:** The highest priority is to use the already-located **Client Packet Handler** in `Rex-Kwon-Do.exe` to build a complete map of every packet ID and its function. This is the cornerstone of all future development.

@@ -87,43 +87,6 @@ Key techniques that led to success:
 
 ---
 
-## 7. Future Modding Directions & Research
-
-### 🔍 Fix the Position Methods
-
-- **Hypothesis 1:** Case mismatch in function names (e.g., `getposition` vs `GetPosition`).
-  - ✅ **Next Step:** Try lowercase/camelCase versions from Lua.
-- **Hypothesis 2:** Functions live on a parent class (`BaseEntity`).
-  - ✅ **Next Step:** Analyze `Player` inheritance in Ghidra. Check `luabind::class_<BaseEntity>` bindings.
-
-### 🔍 Fix the Custom Item Type
-
-- **Key Goal:** Create an `Item` subclass accepted by `SetItem`.
-  - ✅ **Next Step:** Bypass inheritance temporarily. Call `Item()` directly and attach methods manually.
-  - Investigate how `luabind` constructs `ItemWrapper` objects.
-
-### 🔍 Implement Untested Functions
-
-- **Test functions:** `GetHealth`, `SetHealth`, `GetEyePosition`.
-  - ✅ **Next Step:** Build debug commands to inspect their return values and input formats.
-
-### 🔍 Explore Client-Side Connectivity
-
-- Check for `--ip`, `--connect` arguments in `Rex-Kwon-Do.exe` for easier server joins.
-- Reverse engineer how config files or input flows work client-side.
-
-### 🔍 World Editing Potential
-
-- Investigate APIs like `SetBlock(x,y,z,type,color)` or reverse engineer `world.db` blob data format for custom building tools.
-
-### 🔍 Event Hooks
-
-- Investigate if events like `OnPlayerHit`, `OnBlockDestroy`, or `OnMessageReceived` exist and are exposed to Lua.
-
----
-
 ## Conclusion
 
 Brickcraft modding has advanced from basic exploration to a deep understanding of its Lua-C++ bindings. The path forward involves solving two key technical barriers—position control and item creation—and building upon the nearly complete API map. This guide will continue evolving as further breakthroughs occur.
-
-**Happy hacking!**

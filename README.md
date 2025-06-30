@@ -42,7 +42,7 @@ The following internal C++ engine features are not accessible from Lua, and mods
 
 ## 5. Final, Stable Mod Showcase
 
-The final version of our mod script (`MyFirstMod.lua v5.0`) demonstrates the full potential of the available API:
+The final version of our mod script (`MyFirstMod.lua`) demonstrates the full potential of the available API:
 
 - `/fly`: A reliable, toggleable flight command that equips/unequips the native JetPack item and correctly tracks player state.
 - `/launcher`: A safe, physics-based "hop" ability.

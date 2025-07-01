@@ -1,7 +1,5 @@
 # Document 1: Overall Development Progress & Project Status
 ---
-* Project: The Brickcraft Restoration Project
-
 * Current Status: Phase 2 - C++ Engine Patching & API Expansion
 ---
 

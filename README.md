@@ -1,55 +1,26 @@
-# The Definitive Brickcraft Modding & Development Guide
-
-This comprehensive guide serves as the definitive source of truth for the 2012 Brickcraft prototype, detailing the full extent and limitations of its modding capabilities.
+# Document 1: Overall Development Progress & Project Status
+---
+Project: The Brickcraft Restoration Project
+Current Status: Phase 2 - C++ Engine Patching & API Expansion
 
 ---
 
-### **1. Executive Summary**
-This project has successfully reverse-engineered the Lua scripting API for the 2012 Brickcraft prototype. Our conclusion is absolute: the API allows for simple, fun, server-side mods but is fundamentally limited. Core gameplay features like player position control, view direction, and inventory management are inaccessible from Lua. True advancement in Brickcraft modding will require moving beyond Lua to C++-level binary patching.
+### I. Project Summary:
+This project was initiated to explore the modding capabilities of the unreleased 2012 Brickcraft prototype. Through a multi-week effort, we have successfully moved beyond the initial limitations of the game's native Lua scripting API and have developed a stable, working C++ injection and patching framework.
 
 ---
 
-### **2. The Four Unbreakable Rules of Lua Modding**
-Our research has confirmed four fundamental principles that govern all Lua modding for this prototype:
-
-1.  **The API is Fixed and Limited:** The handful of functions we have discovered (`PushPlayer`, `SetItem`, etc.) are the *only* functions available. The vast majority of the C++ engine is not exposed to Lua.
-2.  **Items Cannot Be Unequipped via Script:** The function `player:SetItem(nil)` will cause a server error. Once an item is equipped, it cannot be removed from a player via script. The only way to remove it is for the player to disconnect.
-3.  **Many Native Behaviors are Unstoppable:** The `JetPack` item has a native C++ "hover" effect that is active whenever a player has the item equipped. This behavior cannot be toggled or disabled from Lua.
-4.  **The Physics Engine is Fragile:** Applying large, instantaneous forces to a player will cause their velocity to become too high for the collision engine, resulting in them "tunneling" through the terrain and triggering a failsafe recovery that launches them into the air. Physics-based abilities must use extremely small force values to remain stable.
-
----
-
-### **3. The Definitive (and Final) Lua API**
-This table represents the complete list of reliably working custom functions available to Lua modders. Any function not on this list should be considered inaccessible.
-
-| Object/Class    | Method/Property           | Status                     | Description                                                  |
-|-----------------|---------------------------|----------------------------|--------------------------------------------------------------|
-| Player          | :PushPlayer(vector)       | <font color="green">WORKING</font> | Applies a physical force to the player object.               |
-|                 | :SetItem(item)            | <font color="green">WORKING</font> | Equips a native item (like the global JetPack object) Cannot accept `nil`. Irreversible for the session..       |
-|                 | :GetGuidAsInteger()       | <font color="green">WORKING</font> | Returns the player's unique 64-bit numerical ID.             |
-|                 | :GetName()                | <font color="green">WORKING</font> | Returns the player's name as a string.                       |
-| ServerCmd       | (Various)                 | <font color="green">WORKING</font> | The entire command system (AddCommand, AddAlias, etc.) is functional. |
-| EntityManager   | .Players                  | <font color="green">WORKING</font> | An iterable collection of all currently connected players.   |
-| Vector3         | Vector3(x,y,z) & all math | <font color="green">WORKING</font> | The 3D vector class is fully functional.                     |
-| JetPack         | JetPack() & :Update()     | <font color="green">WORKING</font> | The game's native Jetpack class can be instantiated and its Update method can be overwritten. |
+### II. Major Accomplishments to Date:
+* Complete Lua API Mapping: The entire server-side Lua API has been reverse-engineered and its hard limitations have been definitively documented.
+* Discovery of Core Engine Components: Critical C++ classes and functions have been located within the server executable, including:
+  1. The CityGenerator and LegoWorldGenerator classes, responsible for world creation.
+  2. The TryPlaceBrick function, the key to block manipulation.
+  3. The use of the Bullet Physics Library, providing a known standard for how physics are handled.
+  4. Development of a Stable C++ Injection Tool: A functional C++ injector (BrickcraftInjector.exe) has been built and proven to work.
+  5. Development of a Stable C++ Patcher Stub: A patcher DLL (BrickcraftPatcher.dll) has been developed that can successfully hook into the live server process without causing instability. It currently has an empty payload, awaiting final implementation.
+  6. Creation of a Mod Manager GUI Prototype: A separate project (BrickcraftModManager) has been created, demonstrating a working GUI that can launch the server and trigger the injection process, laying the foundation for a user-friendly launcher.
 
 ---
 
-### **4. Confirmed Impossible Lua Mods**
-Based on the Unbreakable Rules, we can definitively state that the following mod concepts are **impossible** with pure Lua scripting:
-
-*   **Toggleable Flight:** Because items cannot be unequipped and the native hover is always on, true on/off flight is impossible. The only implementation is a permanent, one-way activation.
-*   **Teleportation / Waypoints:** Requires `GetPosition` and `SetPosition`, which are not bound.
-*   **Targeted Abilities:** Requires `GetViewDirection`, which is not bound.
-*   **Client Inventory/Hotbar Updates:** Requires access to the native inventory system (`AdjustNumBlocks`), which is not bound.
-*   **Advanced Physics Tools:** Tools that cause high-speed falls (like a powerful launcher) are fundamentally unstable and will cause players to clip through the terrain.
-
----
-
-### **5. The Future of Brickcraft: Beyond Lua**
-The Lua discovery phase of this project is complete. For the community to unlock the true potential of the prototype, the next steps must involve C++-level modifications. The path forward is clear:
-
-1.  **Map the Client Network Protocol:** The highest priority is to use the already-located **Client Packet Handler** in `Rex-Kwon-Do.exe` to build a complete map of every packet ID and its function. This is the cornerstone of all future development.
-2.  **Develop a Patcher/Injector Tool:** This is the most viable path to new features. A dedicated C++ program would be written to load the server executable and add the missing Lua bindings for `GetPosition`, `AdjustNumBlocks`, etc., before the game starts. This would empower Lua modders to create the advanced features that are currently impossible.
-3.  **Ambitious Goal: A Custom Client:** A long-term project that would use the network protocol map to build a new, modern client from the ground up, free from the bugs and limitations of the original.
-"""
+###III. Current Project Goal:
+The immediate and primary goal is to fully implement the C++ patcher payload. This involves solving the final hooking issue to enable our custom C++ functions to be called, which will in turn add the GetPosition, SetPosition, and SetBlock commands to the Lua API. Achieving this will mark the successful completion of Phase 2 and unlock true creative modding.

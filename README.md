@@ -7,7 +7,7 @@
 
 ## I. Project Summary:
 
-This project was initiated to explore the modding capabilities of the unreleased 2012 Brickcraft prototype. Through a multi-week effort, we have successfully moved beyond the initial limitations of the game's native Lua scripting API and have developed a **stable, working C++ injection and patching framework**.
+This project was initiated to explore the modding capabilities of the unreleased 2012 Brickcraft prototype. We have successfully moved beyond the initial limitations of the game's native Lua scripting API and have developed a **stable, working C++ injection and patching framework**.
 
 ---
 

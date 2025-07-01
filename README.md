@@ -26,7 +26,9 @@ This project was initiated to explore the modding capabilities of the unreleased
 
 ## III. Current Project Goal:
 
-The immediate and primary goal is to **fully implement the C++ patcher payload**. This involves solving the final hooking issue to enable our custom C++ functions to be called, which will in turn add the **GetPosition**, **SetPosition**, and **SetBlock** commands to the Lua API. Achieving this will mark the successful completion of Phase 2 and unlock true creative modding.
+The immediate and primary goal is to **fully implement the C++ patcher payload**. This involves solving the final hooking issue to enable our custom C++ functions to be called, which will in turn add the **GetPosition**, **SetPosition**, and **SetBlock** commands to the Lua API.
+
+---
 
 # Brickcraft Lua Modding Guide (Definitive Edition)
 

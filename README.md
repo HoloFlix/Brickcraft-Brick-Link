@@ -13,14 +13,14 @@ This project was initiated to explore the modding capabilities of the unreleased
 ### II. Major Accomplishments to Date:
 * Complete Lua API Mapping: The entire server-side Lua API has been reverse-engineered and its hard limitations have been definitively documented.
 * Discovery of Core Engine Components: Critical C++ classes and functions have been located within the server executable, including:
-  1. The CityGenerator and LegoWorldGenerator classes, responsible for world creation.
-  2. The TryPlaceBrick function, the key to block manipulation.
-  3. The use of the Bullet Physics Library, providing a known standard for how physics are handled.
-  4. Development of a Stable C++ Injection Tool: A functional C++ injector (BrickcraftInjector.exe) has been built and proven to work.
-  5. Development of a Stable C++ Patcher Stub: A patcher DLL (BrickcraftPatcher.dll) has been developed that can successfully hook into the live server process without causing instability. It currently has an empty payload, awaiting final implementation.
-  6. Creation of a Mod Manager GUI Prototype: A separate project (BrickcraftModManager) has been created, demonstrating a working GUI that can launch the server and trigger the injection process, laying the foundation for a user-friendly launcher.
+  **1.** The CityGenerator and LegoWorldGenerator classes, responsible for world creation.
+  **2.** The TryPlaceBrick function, the key to block manipulation.
+  **3.** The use of the Bullet Physics Library, providing a known standard for how physics are handled.
+  **4.** Development of a Stable C++ Injection Tool: A functional C++ injector (BrickcraftInjector.exe) has been built and proven to work.
+  **5.** Development of a Stable C++ Patcher Stub: A patcher DLL (BrickcraftPatcher.dll) has been developed that can successfully hook into the live server process without causing instability. It currently has an empty payload, awaiting final implementation.
+  **6.** Creation of a Mod Manager GUI Prototype: A separate project (BrickcraftModManager) has been created, demonstrating a working GUI that can launch the server and trigger the injection process, laying the foundation for a user-friendly launcher.
 
 ---
 
-###III. Current Project Goal:
+### III. Current Project Goal:
 The immediate and primary goal is to fully implement the C++ patcher payload. This involves solving the final hooking issue to enable our custom C++ functions to be called, which will in turn add the GetPosition, SetPosition, and SetBlock commands to the Lua API. Achieving this will mark the successful completion of Phase 2 and unlock true creative modding.

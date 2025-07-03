@@ -1,8 +1,8 @@
-# Brickcraft
+# Brickcraft (2012 Prototype) 
 
 ## Overall Development Progress & Project Status
 
-**Project**: The Brickcraft (2012 Prototype)  
+**Project**: Brick-Kwon-Do  
 **Current Status**: Phase 2 - C++ Engine Re-implementation & Tooling  
 
 ### I. Project Summary

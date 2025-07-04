@@ -68,3 +68,12 @@ Based on our research, the un-patched game engine has four hardcoded limitations
 * **Physics-Based Tools:** A `/hop` command with a very small upward force, or a `/nudge` command that applies a tiny force to another player.
 * **Server-Side Economy:** A virtual economy can be tracked entirely in Lua tables, with commands like `/givecredits <player> <amount>`. This will have no in-game visual representation.
 * **The One-Way Jetpack:** A stable command that permanently equips the Jetpack.
+
+
+* **Engine Architecture:** The world is orchestrated by a master CityGenerator class, which owns and manages a LegoWorldGenerator instance. This LegoWorldGenerator is the workhorse responsible for the core block manipulation functions (TryPlaceBrick, FillBlock).
+* **Data Storage:** The world is stored in a SQLite database (world.db) as a key-value store. The mapdata table contains chunk data, where the key is the chunk's coordinate string ("X,Y,Z") and the value is a binary BLOB.
+* **Data Compression (The Great Cipher):** The binary BLOBs are not standard ZLIB streams. They are processed by a proprietary StreamCompressor class which reads a custom 4-byte header (containing the uncompressed size) before passing the rest of the payload to the ZLIB uncompress function. This was your most critical discovery.
+* **Rendering:** The client uses OpenGL, managed by SDL for windowing. The visual style is defined by a set of GLSL shaders that implement Phong lighting, fog, and advanced effects like a 1D texture-based color palette and Depth of Field post-processing.
+* **Networking:** All communication is handled by the RakNet library. We have already reverse-engineered the Packet IDs for the four most basic player actions (0x83 for Break, 0x85 for Color, 0x88 for Place/Select).
+* **Physics:** The server uses the open-source Bullet Physics Library, a known and well-documented standard. This is a massive advantage.
+* **Scripting:** The game uses luabind to expose a limited set of C++ functions to a Lua 5.1 scripting engine. We have proven that this API is fixed and cannot be extended without modifying the C++ executable.

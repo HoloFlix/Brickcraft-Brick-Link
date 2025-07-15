@@ -1,0 +1,27 @@
+#pragma once
+
+#include "btBulletDynamicsCommon.h"
+#include "DataTypes.h"
+#include "RakNetTypes.h" // For RakNetGUID
+#include "NetworkIDManager.h" // NEW: For RakNet::NetworkIDManager
+
+class Player {
+public:
+    Player();
+    ~Player();
+
+    void ProcessInput(const PlayerInput& input);
+
+    btRigidBody* GetPhysicsBody() const;
+    void SetPhysicsBody(btRigidBody* b);
+    RakNet::RakNetGUID GetGUID() const;
+    void SetGUID(RakNet::RakNetGUID g);
+
+    // NEW: Setter for NetworkIDManager
+    void SetNetworkIDManager(RakNet::NetworkIDManager* mgr);
+
+private:
+    btRigidBody* physicsBody;
+    RakNet::RakNetGUID guid;
+    RakNet::NetworkIDManager* networkIdManager; // NEW: Member to hold the manager
+};

@@ -1,0 +1,26 @@
+#pragma once
+
+#include <vector>
+#include "DataTypes.h"
+#include "btBulletDynamicsCommon.h" // Include for btDiscreteDynamicsWorld
+
+class World {
+public:
+    // Default constructor (NEW)
+    World();
+    // Constructor to inject the physics world
+    World(btDiscreteDynamicsWorld* dynamicsWorld);
+
+    void GenerateSimplePlatform(); // Renamed from GeneratePlatform
+    const std::vector<Brick>& GetBricks() const;
+
+    // Destructor to clean up physics shapes and motion states created by this World
+    ~World();
+
+private:
+    std::vector<Brick> bricks;
+    btDiscreteDynamicsWorld* physicsWorld; // Pointer to the physics world
+    std::vector<btCollisionShape*> collisionShapes; // To manage shapes created by World
+    std::vector<btDefaultMotionState*> motionStates; // To manage motion states created by World
+    std::vector<btRigidBody*> rigidBodies; // To manage rigid bodies created by World
+};

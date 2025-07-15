@@ -1,0 +1,40 @@
+#include "Player.h"
+#include <iostream>
+#define _USE_MATH_DEFINES
+#include <math.h>
+
+Player::Player() : physicsBody(nullptr), guid(RakNet::UNASSIGNED_RAKNET_GUID), networkIdManager(nullptr) {} // NEW: Initialize networkIdManager
+Player::~Player(){}
+
+void Player::ProcessInput(const PlayerInput& input){
+    if(!this->physicsBody) return;
+    btTransform t; this->physicsBody->getMotionState()->getWorldTransform(t);
+    if(input.delta_yaw != 0){
+        t.setRotation(t.getRotation()*btQuaternion(btVector3(0,1,0),input.delta_yaw*-0.005f));
+    }
+    btVector3 v(0,this->physicsBody->getLinearVelocity().y(),0);
+    btVector3 f=t.getBasis().getColumn(2);f.setY(0);f.normalize();
+    btVector3 r=t.getBasis().getColumn(0);r.setY(0);r.normalize();
+
+    if(input.is_forward_pressed) v-=f*5.f;
+    if(input.is_backward_pressed) v+=f*5.f;
+    if(input.is_left_pressed) v-=r*5.f;
+    if(input.is_right_pressed) v+=r*5.f;
+
+    this->physicsBody->setLinearVelocity(v);
+    if(input.is_jump_pressed && (this->physicsBody->getCenterOfMassPosition().y()<1.5f)){
+        this->physicsBody->applyCentralImpulse(btVector3(0,7.f,0));
+    }
+    this->physicsBody->getMotionState()->setWorldTransform(t);
+    this->physicsBody->activate(true);
+}
+
+btRigidBody* Player::GetPhysicsBody() const { return this->physicsBody; }
+void Player::SetPhysicsBody(btRigidBody* b) { this->physicsBody = b; }
+RakNet::RakNetGUID Player::GetGUID() const { return this->guid; }
+void Player::SetGUID(RakNet::RakNetGUID g) { this->guid = g; }
+
+// NEW: Implementation for SetNetworkIDManager
+void Player::SetNetworkIDManager(RakNet::NetworkIDManager* mgr) {
+    this->networkIdManager = mgr;
+}

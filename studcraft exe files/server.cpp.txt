@@ -1,0 +1,267 @@
+#define _WINSOCKAPI_
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+
+#include "Server.h"
+#include "MessageIdentifiers.h"
+#include "BitStream.h"
+#include "GetTime.h"
+#include "btBulletDynamicsCommon.h"
+#include <iostream>
+#include <algorithm>
+#include <vector>
+#include <windows.h> // For Sleep
+
+const unsigned char ID_SERVER_WORLD_DATA = 0x82;
+const unsigned char ID_PLAYER_ACTION = 0x88;
+const unsigned char ID_PLAYER_STATES = 0x89;
+const unsigned char ID_PLAYER_DISCONNECT_NOTIFICATION = 0x90;
+
+// Server class constructor (Corrected)
+Server::Server() :
+    peer(nullptr),
+    networkIdManager(nullptr),
+    dynamicsWorld(nullptr),
+    c_config(nullptr),
+    dispatcher(nullptr),
+    broadphase(nullptr),
+    solver(nullptr),
+    world(nullptr) // Initialize world to nullptr FIRST
+{
+    // Physics initialization must happen here so dynamicsWorld is valid before World constructor
+    init_physics();
+
+    // Now that dynamicsWorld is valid, create the World object, passing it the physics world
+    world = new World(this->dynamicsWorld);
+}
+
+// Server class destructor
+Server::~Server() {
+    // Clean up players and their associated physics bodies
+    for (size_t i = 0; i < players.size(); ++i) {
+        Player* p = players[i];
+        if (p) {
+            btRigidBody* b = p->GetPhysicsBody();
+            if (b) {
+                if (dynamicsWorld) {
+                    dynamicsWorld->removeRigidBody(b);
+                }
+                delete b->getMotionState();
+                delete b->getCollisionShape();
+                delete b;
+            }
+            delete p; // Delete the Player object itself
+        }
+    }
+    players.clear();
+
+    // Cleanup world (this will now call World::~World() which cleans its physics objects)
+    delete world;
+    world = nullptr;
+
+    // Cleanup physics components (only the core Bullet objects, not those managed by World)
+    deinit_physics();
+
+    // Cleanup RakNet components
+    if (peer) {
+        RakNet::RakPeerInterface::DestroyInstance(peer);
+        peer = nullptr;
+    }
+    delete networkIdManager;
+    networkIdManager = nullptr;
+}
+
+// Server Startup function (Corrected)
+void Server::Startup(){
+    init_networking();
+
+    world->GenerateSimplePlatform();
+
+    std::cout << "[OK] Startup Complete\n";
+}
+
+void Server::init_physics(){
+    c_config = new btDefaultCollisionConfiguration();
+    dispatcher = new btCollisionDispatcher(c_config);
+    broadphase = new btDbvtBroadphase();
+    solver = new btSequentialImpulseConstraintSolver();
+    dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher,broadphase,solver,c_config);
+    dynamicsWorld->setGravity(btVector3(0,-10,0));
+}
+
+void Server::deinit_physics(){
+    if (dynamicsWorld) {
+        for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
+            btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
+            btRigidBody* body = btRigidBody::upcast(obj);
+            if (body && body->getMotionState()) {
+                delete body->getMotionState();
+            }
+            dynamicsWorld->removeCollisionObject(obj);
+            delete obj;
+        }
+    }
+
+    delete dynamicsWorld;
+    dynamicsWorld = nullptr;
+    delete solver;
+    solver = nullptr;
+    delete broadphase;
+    broadphase = nullptr;
+    delete dispatcher;
+    dispatcher = nullptr;
+    delete c_config;
+    c_config = nullptr;
+}
+
+void Server::init_networking(){
+    peer = RakNet::RakPeerInterface::GetInstance();
+
+    networkIdManager = new RakNet::NetworkIDManager();
+
+    RakNet::SocketDescriptor sd(37373,0);
+    peer->Startup(10,&sd,1);
+    peer->SetMaximumIncomingConnections(10);
+}
+
+void Server::Run(){
+    RakNet::Packet*p;
+    std::cout << "[OK] Running...\n";
+
+    RakNet::TimeMS lastPhysicsTick = RakNet::GetTimeMS();
+    const RakNet::TimeMS physicsUpdateInterval = 1000 / 60; // 60 ticks per second
+
+    while(true){
+        for(p=peer->Receive();p;peer->DeallocatePacket(p),p=peer->Receive()){
+            if(p->length==0)continue;
+            unsigned char mID=p->data[0];
+
+            if(mID==ID_NEW_INCOMING_CONNECTION){
+                std::cout << "New incoming connection from " << p->systemAddress.ToString() << std::endl;
+                send_world(p->systemAddress);
+                Player* player = create_player(p->guid);
+                players.push_back(player);
+
+            }
+            else if(mID==ID_PLAYER_ACTION){
+                for(size_t i=0;i<players.size();++i){
+                    if(players[i] && players[i]->GetGUID()==p->guid){
+                        RakNet::BitStream bs(p->data,p->length,false);
+                        bs.IgnoreBytes(1);
+                        PlayerInput pi;
+                        bs.Read(pi);
+                        players[i]->ProcessInput(pi);
+                        break;
+                    }
+                }
+            } else if (mID==ID_CONNECTION_LOST||mID==ID_DISCONNECTION_NOTIFICATION){
+                std::cout << "Client disconnected: " << p->systemAddress.ToString() << std::endl;
+                remove_player(p->guid);
+                RakNet::BitStream bs;
+                bs.Write(ID_PLAYER_DISCONNECT_NOTIFICATION);
+                bs.Write(p->guid);
+                peer->Send(&bs, HIGH_PRIORITY, RELIABLE_ORDERED, 0, p->systemAddress, true);
+            }
+        }
+
+        RakNet::TimeMS currentTime = RakNet::GetTimeMS();
+        if (currentTime - lastPhysicsTick >= physicsUpdateInterval) {
+            dynamicsWorld->stepSimulation(physicsUpdateInterval / 1000.f, 10);
+            send_player_states_to_all_clients();
+            lastPhysicsTick = currentTime;
+        }
+
+        Sleep(15);
+    }
+}
+
+void Server::send_world(RakNet::SystemAddress addr){
+    RakNet::BitStream bs;
+    bs.Write((unsigned char)ID_SERVER_WORLD_DATA);
+
+    Vector3 pos;
+    pos.x = 0;
+    pos.y = 10;
+    pos.z = 0;
+    bs.Write(pos);
+
+    const std::vector<Brick>&bricks=world->GetBricks();
+    bs.Write((unsigned int)bricks.size());
+
+    for(size_t i=0; i<bricks.size();++i){
+        bs.Write((char*)&(bricks[i]),sizeof(Brick));
+    }
+    peer->Send(&bs,HIGH_PRIORITY,RELIABLE_ORDERED,0,addr,false);
+}
+
+void Server::send_player_states_to_all_clients() {
+    if (players.empty()) {
+        return;
+    }
+
+    RakNet::BitStream bs;
+    bs.Write(ID_PLAYER_STATES);
+    bs.Write((unsigned int)players.size());
+
+    for (size_t i = 0; i < players.size(); ++i) {
+        Player* p = players[i];
+        if (p && p->GetPhysicsBody()) {
+            btTransform t;
+            p->GetPhysicsBody()->getMotionState()->getWorldTransform(t);
+            PlayerState ps;
+            ps.guid = p->GetGUID();
+            ps.position.x = t.getOrigin().x();
+            ps.position.y = t.getOrigin().y();
+            ps.position.z = t.getOrigin().z();
+            ps.rotation = t.getRotation(); // Also send rotation
+            bs.Write((char*)&ps, sizeof(PlayerState));
+        }
+    }
+    peer->Send(&bs, HIGH_PRIORITY, UNRELIABLE_SEQUENCED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+}
+
+// NEW, CORRECTED create_player function
+Player* Server::create_player(RakNet::RakNetGUID guid) {
+    Player* p = new Player();
+    p->SetGUID(guid);
+    p->SetNetworkIDManager(networkIdManager); // Set the NetworkIDManager
+
+    // Define the physics properties
+    btTransform initialTransform;
+    initialTransform.setIdentity();
+    initialTransform.setOrigin(btVector3(0,10,0));
+    btDefaultMotionState* myMotionState = new btDefaultMotionState(initialTransform);
+    btCollisionShape* playerShape = new btCapsuleShape(0.5f, 2.0f); // Capsule for player
+    btVector3 localInertia(0,0,0);
+    playerShape->calculateLocalInertia(1.0f, localInertia); // Mass 1.0f
+
+    btRigidBody::btRigidBodyConstructionInfo rbInfo(1.0f, myMotionState, playerShape, localInertia);
+    btRigidBody* body = new btRigidBody(rbInfo);
+
+    // This tells the physics engine: "This object can never go to sleep.
+    // It should always be active and affected by forces like gravity."
+    body->setActivationState(DISABLE_DEACTIVATION);
+
+    this->dynamicsWorld->addRigidBody(body);
+    p->SetPhysicsBody(body);
+    
+    return p;
+}
+
+void Server::remove_player(RakNet::RakNetGUID guid) {
+    for (size_t i = 0; i < players.size(); ++i) {
+        if (players[i] && players[i]->GetGUID() == guid) {
+            btRigidBody* b = players[i]->GetPhysicsBody();
+            if (b) {
+                if (dynamicsWorld) {
+                    dynamicsWorld->removeRigidBody(b);
+                }
+                delete b->getMotionState();
+                delete b->getCollisionShape();
+                delete b;
+            }
+            delete players[i];
+            players.erase(players.begin() + i);
+            return;
+        }
+    }
+}

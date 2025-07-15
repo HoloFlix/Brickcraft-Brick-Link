@@ -1,0 +1,502 @@
+// --- Linker ---
+#pragma comment(lib, "SDL2.lib")
+#pragma comment(lib, "SDL2main.lib")
+#pragma comment(lib, "opengl32.lib")
+#pragma comment(lib, "glu32.lib")
+#pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "glew32.lib")
+
+// --- Includes ---
+#include <iostream>
+#include <vector>
+#include <cmath>
+#include <map>
+#include <algorithm>
+#include <fstream>
+#include <string>
+
+#include "GL/glew.h"
+
+#define NOMINMAX // Prevents min/max macros from interfering
+#include "SDL.h"
+#include "SDL_opengl.h"
+#include <gl/GLU.h>
+
+#include "RakPeerInterface.h"
+#include "MessageIdentifiers.h"
+#include "BitStream.h"
+#include "RakNetTypes.h"
+#include "RakString.h"
+#include "btBulletCollisionCommon.h"
+#include "DataTypes.h"
+
+// Protocol IDs
+const unsigned char ID_PLAYER_ACTION = 0x88;
+const unsigned char ID_SERVER_WORLD_DATA = 0x82;
+const unsigned char ID_PLAYER_STATES = 0x89;
+const unsigned char ID_PLAYER_DISCONNECT_NOTIFICATION = 0x90;
+
+// --- Simple 4x4 Matrix struct for OpenGL math ---
+// This is a basic implementation for common matrix operations.
+// For a full-featured game, consider a dedicated math library.
+struct Matrix4x4 {
+    float m[16]; // Column-major order, as used by OpenGL
+
+    // Default constructor: Initializes to identity matrix
+    Matrix4x4() {
+        m[0]=1; m[1]=0; m[2]=0; m[3]=0;
+        m[4]=0; m[5]=1; m[6]=0; m[7]=0;
+        m[8]=0; m[9]=0; m[10]=1; m[11]=0;
+        m[12]=0; m[13]=0; m[14]=0; m[15]=1;
+    }
+
+    // Matrix multiplication (this * other)
+    Matrix4x4 operator*(const Matrix4x4& other) const {
+        Matrix4x4 result;
+        for (int i = 0; i < 4; ++i) { // Rows of result
+            for (int j = 0; j < 4; ++j) { // Columns of result
+                result.m[j*4 + i] = // result[row][col] is result.m[col*4 + row]
+                    m[0*4 + i] * other.m[j*4 + 0] +
+                    m[1*4 + i] * other.m[j*4 + 1] +
+                    m[2*4 + i] * other.m[j*4 + 2] +
+                    m[3*4 + i] * other.m[j*4 + 3];
+            }
+        }
+        return result;
+    }
+
+    // Function to calculate the inverse transpose of the 3x3 submatrix
+    // Used for transforming normals. Assumes no non-uniform scaling.
+    Matrix4x4 GetNormalMatrix() const {
+        Matrix4x4 normalMatrix; // Starts as identity
+
+        // Get 3x3 submatrix (top-left)
+        float a11 = m[0], a12 = m[4], a13 = m[8];
+        float a21 = m[1], a22 = m[5], a23 = m[9];
+        float a31 = m[2], a32 = m[6], a33 = m[10];
+
+        // Calculate determinant of 3x3 submatrix
+        float det = a11 * (a22 * a33 - a32 * a23) -
+                    a12 * (a21 * a33 - a31 * a23) +
+                    a13 * (a21 * a32 - a31 * a22);
+
+        if (fabs(det) < 1e-6) { // Check for singularity (matrix cannot be inverted)
+            std::cerr << "Warning: Singular matrix for normal calculation. Returning identity." << std::endl;
+            return Matrix4x4(); // Return identity as fallback
+        }
+
+        float invDet = 1.0f / det;
+
+        // Calculate inverse of 3x3 submatrix, then transpose (which is the inverse transpose)
+        normalMatrix.m[0] = (a22 * a33 - a32 * a23) * invDet; // (row 1, col 1)
+        normalMatrix.m[1] = (a31 * a23 - a21 * a33) * invDet; // (row 2, col 1)
+        normalMatrix.m[2] = (a21 * a32 - a31 * a22) * invDet; // (row 3, col 1)
+
+        normalMatrix.m[4] = (a32 * a13 - a12 * a33) * invDet; // (row 1, col 2)
+        normalMatrix.m[5] = (a11 * a33 - a31 * a13) * invDet; // (row 2, col 2)
+        normalMatrix.m[6] = (a31 * a12 - a11 * a32) * invDet; // (row 3, col 2)
+
+        normalMatrix.m[8] = (a12 * a23 - a22 * a13) * invDet; // (row 1, col 3)
+        normalMatrix.m[9] = (a21 * a13 - a11 * a23) * invDet; // (row 2, col 3)
+        normalMatrix.m[10] = (a11 * a22 - a21 * a12) * invDet; // (row 3, col 3)
+
+        // The other elements of the 4x4 matrix remain as identity for a normal matrix
+        normalMatrix.m[3] = normalMatrix.m[7] = normalMatrix.m[11] = 0.0f;
+        normalMatrix.m[12] = normalMatrix.m[13] = normalMatrix.m[14] = 0.0f;
+        normalMatrix.m[15] = 1.0f;
+
+        return normalMatrix;
+    }
+
+    // Load from OpenGL matrix (column-major float[16])
+    void LoadFromOpenGL(const float* glMatrix) {
+        for(int i = 0; i < 16; ++i) {
+            m[i] = glMatrix[i];
+        }
+    }
+};
+
+
+// Globals
+RakNet::RakPeerInterface* g_peer = nullptr;
+SDL_Window* g_window = nullptr;
+SDL_GLContext g_context;
+bool g_is_connected = false;
+bool g_quit_app = false;
+std::vector<Brick> g_world_bricks;
+
+// Global for our new shader program and its uniform locations
+GLuint g_shader_program;
+GLint  g_loc_mvp_matrix;
+GLint  g_loc_model_matrix;
+GLint  g_loc_normal_matrix;
+GLint  g_loc_camera_pos;
+
+PlayerState g_self_state;
+std::map<RakNet::RakNetGUID, PlayerState> g_other_players;
+
+float g_current_yaw = 0.0f;
+float g_current_pitch = 0.0f;
+
+// Forward Declarations
+void Render();
+void SendInputToServer(float dYaw, float dPitch);
+void HandleNetworkPacket(RakNet::Packet* packet);
+
+// --- Shader Loading Functions ---
+std::string ReadFile(const char* filePath) {
+    std::ifstream fileStream(filePath, std::ios::in);
+    if (!fileStream.is_open()) {
+        std::cerr << "Could not read file " << filePath << ". File does not exist." << std::endl;
+        return "";
+    }
+    std::string line = "";
+    std::string content = "";
+    while(!fileStream.eof()) {
+        std::getline(fileStream, line);
+        content.append(line + "\n");
+    }
+    fileStream.close();
+    return content;
+}
+
+GLuint LoadShaders(const char* vertex_path, const char* fragment_path) {
+    GLuint vertShader = glCreateShader(GL_VERTEX_SHADER);
+    GLuint fragShader = glCreateShader(GL_FRAGMENT_SHADER);
+    
+    // Read shader files
+    std::string vertShaderStr = ReadFile(vertex_path);
+    std::string fragShaderStr = ReadFile(fragment_path);
+    const char *vertShaderSrc = vertShaderStr.c_str();
+    const char *fragShaderSrc = fragShaderStr.c_str();
+    
+    // Compile vertex shader
+    glShaderSource(vertShader, 1, &vertShaderSrc, NULL);
+    glCompileShader(vertShader);
+
+    // Compile fragment shader
+    glShaderSource(fragShader, 1, &fragShaderSrc, NULL);
+    glCompileShader(fragShader);
+
+    // Link shaders into a program
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vertShader);
+    glAttachShader(program, fragShader);
+    glLinkProgram(program);
+
+    glDeleteShader(vertShader);
+    glDeleteShader(fragShader);
+
+    return program;
+}
+
+
+int main(int argc, char* argv[]) {
+    SDL_Init(SDL_INIT_VIDEO);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    g_window = SDL_CreateWindow("Studcraft Client", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
+    g_context = SDL_GL_CreateContext(g_window);
+    glEnable(GL_DEPTH_TEST);
+
+    // --- NEW: Initialize GLEW ---
+    glewExperimental = GL_TRUE;
+    GLenum err = glewInit();
+    if (GLEW_OK != err) {
+        std::cerr << "Error: " << glewGetErrorString(err) << std::endl;
+        return 1;
+    }
+    std::cout << "[INFO] GLEW Initialized." << std::endl;
+    
+    // --- NEW: Load our shaders ---
+    g_shader_program = LoadShaders("assets/shaders/simple.vert", "assets/shaders/simple.frag");
+    std::cout << "[INFO] Shaders loaded." << std::endl;
+
+    // --- NEW: Get uniform locations ---
+    g_loc_mvp_matrix = glGetUniformLocation(g_shader_program, "u_mvp_matrix");
+    g_loc_model_matrix = glGetUniformLocation(g_shader_program, "u_model_matrix");
+    g_loc_normal_matrix = glGetUniformLocation(g_shader_program, "u_normal_matrix");
+    g_loc_camera_pos = glGetUniformLocation(g_shader_program, "u_camera_pos");
+
+    // Check if uniforms were found (optional, but good for debugging)
+    if (g_loc_mvp_matrix == -1) std::cerr << "Warning: u_mvp_matrix uniform not found." << std::endl;
+    if (g_loc_model_matrix == -1) std::cerr << "Warning: u_model_matrix uniform not found." << std::endl;
+    if (g_loc_normal_matrix == -1) std::cerr << "Warning: u_normal_matrix uniform not found." << std::endl;
+    if (g_loc_camera_pos == -1) std::cerr << "Warning: u_camera_pos uniform not found." << std::endl;
+
+
+    g_peer = RakNet::RakPeerInterface::GetInstance();
+    RakNet::SocketDescriptor sd;
+    g_peer->Startup(1, &sd, 1);
+    g_peer->Connect("127.0.0.1", 37373, 0, 0);
+    SDL_SetRelativeMouseMode(SDL_TRUE);
+    
+    // --- Main Game Loop ---
+    while (!g_quit_app) {
+        float delta_yaw = 0.0f;
+        float delta_pitch = 0.0f;
+        SDL_Event e;
+        while(SDL_PollEvent(&e) != 0) {
+            if(e.type == SDL_QUIT) g_quit_app = true;
+            if(e.type == SDL_MOUSEMOTION) {
+                g_current_yaw += (float)e.motion.xrel * 0.2f;
+                g_current_pitch += (float)e.motion.yrel * 0.2f; 
+            }
+        }
+
+        // Clamp pitch to prevent camera flipping
+        g_current_pitch = std::max(-89.0f, std::min(89.0f, g_current_pitch));
+
+        for (RakNet::Packet* p = g_peer->Receive(); p; g_peer->DeallocatePacket(p), p = g_peer->Receive()) {
+            HandleNetworkPacket(p);
+        }
+        
+        // Remove SendInputToServer for now, we will add it back with full controls
+        // if (g_is_connected) SendInputToServer(delta_yaw, delta_pitch); // REMOVED
+        
+        Render();
+        SDL_Delay(15);
+    }
+    
+    // --- Cleanup ---
+    glDeleteProgram(g_shader_program); 
+
+    RakNet::RakPeerInterface::DestroyInstance(g_peer);
+    SDL_GL_DeleteContext(g_context);
+    SDL_DestroyWindow(g_window);
+    SDL_Quit();
+    return 0;
+}
+
+void HandleNetworkPacket(RakNet::Packet* packet) {
+    RakNet::BitStream bs_in(packet->data, packet->length, false);
+    unsigned char msgId;
+    bs_in.Read(msgId);
+    
+    switch (msgId) {
+        case ID_CONNECTION_REQUEST_ACCEPTED:
+            g_is_connected = true;
+            std::cout << "Connected to server." << std::endl;
+            break;
+        case ID_NO_FREE_INCOMING_CONNECTIONS:
+        case ID_DISCONNECTION_NOTIFICATION:
+        case ID_CONNECTION_LOST:
+            g_is_connected = false;
+            g_quit_app = true; // Set to true to exit cleanly
+            std::cout << "Disconnected from server." << std::endl;
+            break;
+
+        case ID_SERVER_WORLD_DATA: {
+            Vector3 temp_spawn; bs_in.Read(temp_spawn);
+            unsigned int brick_count; bs_in.Read(brick_count);
+            g_world_bricks.clear(); g_world_bricks.reserve(brick_count);
+            for(unsigned int i=0; i<brick_count; ++i) { Brick b; bs_in.Read((char*)&b, sizeof(Brick)); g_world_bricks.push_back(b); }
+            std::cout << "[WORLD] Received and parsed " << brick_count << " bricks." << std::endl;
+            break;
+        }
+
+        case ID_PLAYER_STATES: {
+            unsigned int num_players;
+            bs_in.Read(num_players);
+            g_other_players.clear();
+            for(unsigned int i=0; i < num_players; ++i) {
+                PlayerState ps;
+                bs_in.Read((char*)&ps, sizeof(PlayerState));
+                if(ps.guid == g_peer->GetMyGUID()){
+                    g_self_state = ps;
+                } else {
+                    g_other_players[ps.guid] = ps;
+                }
+            }
+            break;
+        }
+
+        case ID_PLAYER_DISCONNECT_NOTIFICATION: {
+            RakNet::RakNetGUID disconnected_guid;
+            bs_in.Read(disconnected_guid);
+            g_other_players.erase(disconnected_guid);
+            std::cout << "Player with GUID " << disconnected_guid.ToString() << " disconnected." << std::endl;
+            break;
+        }
+
+        case ID_REPLICA_MANAGER_CONSTRUCTION:
+        case ID_REPLICA_MANAGER_SERIALIZE:
+        {
+            if (msgId == ID_REPLICA_MANAGER_CONSTRUCTION) {
+                RakNet::RakString name; bs_in.Read(name);
+            }
+            
+            RakNet::RakNetGUID guid;
+            bs_in.Read(guid);
+
+            btTransform transform;
+            bs_in.Read(transform);
+            
+            if (guid == g_peer->GetMyGUID()) {
+                btVector3 pos = transform.getOrigin();
+                g_self_state.position.x = pos.x();
+                g_self_state.position.y = pos.y();
+                g_self_state.position.z = pos.z();
+                g_self_state.rotation = transform.getRotation();
+            }
+            break;
+        }
+
+        default:
+            std::cout << "Unhandled Message ID: " << (int)msgId << std::endl;
+            break;
+    }
+}
+
+void SendInputToServer(float dYaw, float dPitch) {
+    const Uint8* keyState = SDL_GetKeyboardState(NULL);
+    PlayerInput input = {0};
+    input.is_forward_pressed = (keyState[SDL_SCANCODE_W]!=0);
+    input.is_backward_pressed = (keyState[SDL_SCANCODE_S]!=0);
+    input.is_left_pressed = (keyState[SDL_SCANCODE_A]!=0);
+    input.is_right_pressed = (keyState[SDL_SCANCODE_D]!=0);
+    input.is_jump_pressed = (keyState[SDL_SCANCODE_SPACE]!=0);
+    input.delta_yaw = dYaw;
+    input.delta_pitch = dPitch;
+    RakNet::BitStream bs_out;
+    bs_out.Write((unsigned char)ID_PLAYER_ACTION);
+    bs_out.Write(input);
+    g_peer->Send(&bs_out, LOW_PRIORITY, UNRELIABLE_SEQUENCED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
+}
+
+void Render() {
+    int w, h; SDL_GetWindowSize(g_window, &w, &h);
+    glViewport(0, 0, w, h);
+
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(70.0f, (GLfloat)w / (GLfloat)h, 0.1f, 1000.0f);
+
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+
+    // --- The First-Person Camera Logic ---
+    // FIX: Apply a NEGATIVE pitch to make the mouse feel natural
+    glRotatef(-g_current_pitch, 1.0f, 0.0f, 0.0f);
+    glRotatef(g_current_yaw, 0.0f, 1.0f, 0.0f);
+    glTranslatef(-g_self_state.position.x, -g_self_state.position.y - 1.6f, -g_self_state.position.z);
+    
+    // --- Rendering Fixes ---
+    glClearColor(0.5f, 0.8f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); 
+
+    // Enable features for lighting
+    glEnable(GL_LIGHTING);
+    glEnable(GL_LIGHT0);
+    glEnable(GL_COLOR_MATERIAL);
+    
+    glUseProgram(g_shader_program);
+
+    // --- Send Uniforms to Shader ---
+    float proj_matrix_raw[16];
+    float mv_matrix_raw[16];
+    glGetFloatv(GL_PROJECTION_MATRIX, proj_matrix_raw);
+    glGetFloatv(GL_MODELVIEW_MATRIX, mv_matrix_raw);
+
+    Matrix4x4 projection_matrix;
+    projection_matrix.LoadFromOpenGL(proj_matrix_raw);
+    Matrix4x4 modelview_matrix;
+    modelview_matrix.LoadFromOpenGL(mv_matrix_raw);
+
+    Matrix4x4 mvp_matrix = projection_matrix * modelview_matrix;
+    Matrix4x4 normal_matrix = modelview_matrix.GetNormalMatrix();
+
+    glUniformMatrix4fv(g_loc_mvp_matrix, 1, GL_FALSE, mvp_matrix.m);
+    glUniformMatrix4fv(g_loc_normal_matrix, 1, GL_FALSE, normal_matrix.m);
+    glUniform3f(g_loc_camera_pos, g_self_state.position.x, g_self_state.position.y + 1.6f, g_self_state.position.z);
+
+    // Render world bricks
+    glColor3f(0.8f, 0.8f, 0.8f);
+    for (size_t i = 0; i < g_world_bricks.size(); ++i) {
+        const Brick& brick = g_world_bricks[i];
+        glPushMatrix();
+        glTranslatef(brick.x, brick.y, brick.z);
+        
+        float current_model_matrix_raw[16];
+        glGetFloatv(GL_MODELVIEW_MATRIX, current_model_matrix_raw);
+        Matrix4x4 current_model_matrix;
+        current_model_matrix.LoadFromOpenGL(current_model_matrix_raw);
+        glUniformMatrix4fv(g_loc_model_matrix, 1, GL_FALSE, current_model_matrix.m);
+
+        // --- Draw Cube with Normals ---
+        glBegin(GL_QUADS);
+            // Top Face (Normal: 0, 1, 0)
+            glNormal3f(0.0f, 1.0f, 0.0f);
+            glVertex3f( 1.0f, 0.1f,-1.0f); glVertex3f(-1.0f, 0.1f,-1.0f);
+            glVertex3f(-1.0f, 0.1f, 1.0f); glVertex3f( 1.0f, 0.1f, 1.0f);
+            
+            // Bottom Face (Normal: 0,-1, 0)
+            glNormal3f(0.0f,-1.0f, 0.0f);
+            glVertex3f( 1.0f,-0.1f, 1.0f); glVertex3f(-1.0f,-0.1f, 1.0f);
+            glVertex3f(-1.0f,-0.1f,-1.0f); glVertex3f( 1.0f,-0.1f,-1.0f);
+            
+            // Front Face (Normal: 0, 0, 1)
+            glNormal3f(0.0f, 0.0f, 1.0f);
+            glVertex3f( 1.0f, 0.1f, 1.0f); glVertex3f(-1.0f, 0.1f, 1.0f);
+            glVertex3f(-1.0f,-0.1f, 1.0f); glVertex3f( 1.0f,-0.1f, 1.0f);
+            
+            // Back Face (Normal: 0, 0,-1)
+            glNormal3f(0.0f, 0.0f,-1.0f);
+            glVertex3f( 1.0f,-0.1f,-1.0f); glVertex3f(-1.0f,-0.1f,-1.0f);
+            glVertex3f(-1.0f, 0.1f,-1.0f); glVertex3f( 1.0f, 0.1f,-1.0f);
+            
+            // Left Face (Normal: -1, 0, 0)
+            glNormal3f(-1.0f, 0.0f, 0.0f);
+            glVertex3f(-1.0f, 0.1f, 1.0f); glVertex3f(-1.0f,-0.1f, 1.0f);
+            glVertex3f(-1.0f,-0.1f,-1.0f); glVertex3f(-1.0f, 0.1f,-1.0f);
+            
+            // Right Face (Normal: 1, 0, 0)
+            glNormal3f(1.0f, 0.0f, 0.0f);
+            glVertex3f( 1.0f, 0.1f,-1.0f); glVertex3f( 1.0f,-0.1f,-1.0f);
+            glVertex3f( 1.0f,-0.1f, 1.0f); glVertex3f( 1.0f, 0.1f, 1.0f);
+        glEnd();
+        glPopMatrix();
+    }
+
+    // Render other players
+    glColor3f(1.0f, 0.0f, 0.0f);
+    for (std::map<RakNet::RakNetGUID, PlayerState>::const_iterator it = g_other_players.begin(); it != g_other_players.end(); ++it) {
+        const PlayerState& state = it->second;
+        glPushMatrix();
+        glTranslatef(state.position.x, state.position.y - 1.0f, state.position.z);
+
+        float current_player_model_matrix_raw[16];
+        glGetFloatv(GL_MODELVIEW_MATRIX, current_player_model_matrix_raw);
+        Matrix4x4 current_player_model_matrix;
+        current_player_model_matrix.LoadFromOpenGL(current_player_model_matrix_raw);
+        glUniformMatrix4fv(g_loc_model_matrix, 1, GL_FALSE, current_player_model_matrix.m);
+
+        glBegin(GL_QUADS);
+            // Top face
+            glVertex3f( 0.5f, 1.0f,-0.5f); glVertex3f(-0.5f, 1.0f,-0.5f);
+            glVertex3f(-0.5f, 1.0f, 0.5f); glVertex3f( 0.5f, 1.0f, 0.5f);
+            // Bottom face
+            glVertex3f( 0.5f,-1.0f, 0.5f); glVertex3f(-0.5f,-1.0f, 0.5f);
+            glVertex3f(-0.5f,-1.0f,-0.5f); glVertex3f( 0.5f,-1.0f,-0.5f);
+            // Front face
+            glVertex3f( 0.5f, 1.0f, 0.5f); glVertex3f(-0.5f, 1.0f, 0.5f);
+            glVertex3f(-0.5f,-1.0f, 0.5f); glVertex3f( 0.5f,-1.0f, 0.5f);
+            // Back face
+            glVertex3f( 0.5f,-1.0f,-0.5f); glVertex3f(-0.5f,-1.0f,-0.5f);
+            glVertex3f(-0.5f, 1.0f,-0.5f); glVertex3f( 0.5f, 1.0f,-0.5f);
+            // Left face
+            glVertex3f(-0.5f, 1.0f, 0.5f); glVertex3f(-0.5f, 1.0f,-0.5f);
+            glVertex3f(-0.5f,-1.0f,-0.5f); glVertex3f(-0.5f,-1.0f, 0.5f);
+            // Right face
+            glVertex3f( 0.5f, 1.0f,-0.5f); glVertex3f( 0.5f, 1.0f, 0.5f);
+            glVertex3f( 0.5f,-1.0f, 0.5f); glVertex3f( 0.5f,-1.0f,-0.5f);
+        glEnd();
+        glPopMatrix();
+    }
+
+    // Stop using the shader
+    glUseProgram(0);
+
+    SDL_GL_SwapWindow(g_window);
+}

@@ -1,0 +1,12 @@
+#define _WINSOCKAPI_
+#define _WINSOCK_DEPRECATED_NO_WARNINGS
+
+#include "Server.h"
+
+int main(){
+    Server* s = new Server();
+    s->Startup();
+    s->Run();
+    delete s;
+    return 0;
+}

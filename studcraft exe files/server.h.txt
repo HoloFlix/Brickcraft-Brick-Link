@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+// #include <memory> // REMOVED: No longer using std::unique_ptr for PhysicsWorld
 
 // RakNet Includes (essential for basic networking)
 #include "RakPeerInterface.h"
@@ -8,13 +9,14 @@
 #include "BitStream.h"      // For RakNet::BitStream
 #include "NetworkIDManager.h" // For NetworkIDManager (we manage it now)
 
-// Bullet Physics Includes
-#include "btBulletDynamicsCommon.h"
+// Bullet Physics Includes - NO LONGER NEEDED HERE, PhysicsWorld.h will handle it
+// #include "btBulletDynamicsCommon.h"
 
 // Custom Game Includes
 #include "DataTypes.h" // For Brick, Vector3, PlayerInput, PlayerState
 #include "Player.h"     // For Player class definition
 #include "World.h"      // For World class definition
+#include "PhysicsWorld.h" // NEW: Required for PhysicsWorld class
 
 // No StudcraftConnection or StudcraftReplicaManager classes
 
@@ -25,9 +27,11 @@ public:
     void Startup();
     void Run();
 private:
-    void init_physics();
+    // REMOVED: init_physics() and deinit_physics()
+    // void init_physics();
+    // void deinit_physics();
+
     void init_networking();
-    void deinit_physics();
 
     // Helper functions for sending specific data manually
     void send_world(RakNet::SystemAddress addr);
@@ -40,11 +44,15 @@ private:
     // No ReplicaManager3* replicaManager;
     RakNet::NetworkIDManager* networkIdManager; // We will manage this instance
 
-    btDiscreteDynamicsWorld* dynamicsWorld;
-    btDefaultCollisionConfiguration* c_config;
-    btCollisionDispatcher* dispatcher;
-    btBroadphaseInterface* broadphase;
-    btSequentialImpulseConstraintSolver* solver;
+    // REMOVED: Individual Bullet pointer member variables
+    // btDiscreteDynamicsWorld* dynamicsWorld;
+    // btDefaultCollisionConfiguration* c_config;
+    // btCollisionDispatcher* dispatcher;
+    // btBroadphaseInterface* broadphase;
+    // btSequentialImpulseConstraintSolver* solver;
+
+    // CHANGED: Manages all of Bullet for us (now a raw pointer)
+    PhysicsWorld* m_physicsWorld;
 
     World* world;
     std::vector<Player*> players;

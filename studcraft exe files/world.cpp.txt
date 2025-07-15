@@ -9,14 +9,23 @@ World::World(btDiscreteDynamicsWorld* dynamicsWorld) : physicsWorld(dynamicsWorl
 
 // Destructor to clean up physics objects created by this World
 World::~World() {
-    // Remove rigid bodies from the physics world first
+    // The destructor now simply calls Clear() to perform cleanup.
+    Clear();
+}
+
+void World::Clear() {
+    // This is the safe way to do what the destructor does:
+    // 1. Remove rigid bodies from the physics world first.
     if (physicsWorld) {
         for (size_t i = 0; i < rigidBodies.size(); ++i) {
-            physicsWorld->removeRigidBody(rigidBodies[i]);
+            if (rigidBodies[i]) { // Defensive check
+                physicsWorld->removeRigidBody(rigidBodies[i]);
+            }
         }
     }
 
-    // Delete allocated physics objects
+    // 2. Delete allocated physics objects from memory.
+    // Ensure you delete each pointer individually.
     for (size_t i = 0; i < rigidBodies.size(); ++i) {
         delete rigidBodies[i];
     }
@@ -27,6 +36,8 @@ World::~World() {
         delete collisionShapes[i];
     }
 
+    // 3. Clear the vectors to remove all elements and free their memory.
+    bricks.clear();
     rigidBodies.clear();
     motionStates.clear();
     collisionShapes.clear();
@@ -34,54 +45,46 @@ World::~World() {
 
 
 void World::GenerateSimplePlatform() {
-    // Clear existing bricks and physics objects if regenerating the world
-    // This is important if GenerateSimplePlatform can be called multiple times
-    // without recreating the World object itself.
-    // Call destructor logic to clean up current physics objects
-    this->~World(); // Call destructor to clean up current physics objects
-    // Re-initialize vectors after cleanup
-    bricks.clear();
-    collisionShapes.clear();
-    motionStates.clear();
-    rigidBodies.clear();
-
+    // Call Clear() to safely remove any existing bricks and physics objects
+    // before generating a new platform. This prevents memory leaks and issues
+    // if GenerateSimplePlatform is called multiple times.
+    Clear();
 
     const int world_size = 16;
-    const float brick_step = 2.0f;
+    const float brick_step = 2.0f; // Distance between brick centers
 
     for (int i = -world_size / 2; i < world_size / 2; ++i) {
         for (int j = -world_size / 2; j < world_size / 2; ++j) {
-            Brick floor_tile = {0};
+            Brick floor_tile = {0}; // Initialize to zeros
             floor_tile.x = (float)i * brick_step;
-            floor_tile.y = 0.0f; // Position of the visual brick
+            floor_tile.y = 0.0f; // Visual Y position for the bottom of the brick
             floor_tile.z = (float)j * brick_step;
 
-            // FIX: Use the correct member names from DataTypes.h
-            floor_tile.id = 1;
-            floor_tile.c_id = 7;
+            floor_tile.id = 1;   // Example ID
+            floor_tile.c_id = 7; // Example color ID
 
             bricks.push_back(floor_tile);
 
-            // --- THIS IS THE NEW LOGIC FOR PHYSICS BODIES ---
-            // Ensure physicsWorld is valid before creating physics bodies
+            // --- Physics Body Creation for each brick ---
             if (this->physicsWorld) {
-                // 1. Define the shape. A box of 1x0.1x1 units. The Y-size is small
-                //    since it's a flat tile. btBoxShape takes half-extents, so divide by 2.
+                // 1. Define the collision shape. A box of 1x0.1x1 units.
+                //    btBoxShape takes half-extents, so a 2x0.2x2 brick needs (1.0f, 0.1f, 1.0f)
                 btCollisionShape* groundShape = new btBoxShape(btVector3(1.0f, 0.1f, 1.0f));
                 collisionShapes.push_back(groundShape); // Store for cleanup
 
-                // 2. Set its position in the world. It must match the visual brick's position.
-                // Note: Bullet uses the center of the shape. If floor_tile.y is the bottom,
-                // adjust origin by half the height of the box.
+                // 2. Set its initial position and orientation in the world.
+                //    The physics body's origin (center) should align with the visual brick's center.
+                //    If floor_tile.y is the visual bottom, the physics body's center is floor_tile.y + half_height.
                 btTransform groundTransform;
                 groundTransform.setIdentity();
-                groundTransform.setOrigin(btVector3(floor_tile.x, floor_tile.y + 0.1f, floor_tile.z)); // +0.1f for half height
+                groundTransform.setOrigin(btVector3(floor_tile.x, floor_tile.y + 0.1f, floor_tile.z)); // +0.1f for half height of the box (0.2f / 2)
 
-                // 3. Mass is 0 for a static object.
+                // 3. Set mass to 0 for a static object (immovable).
                 btScalar mass(0.0);
-                btVector3 localInertia(0, 0, 0); // Static objects have zero inertia
+                // Static objects have zero inertia
+                btVector3 localInertia(0, 0, 0); 
 
-                // 4. Create the body and add it to the physics world.
+                // 4. Create the motion state and rigid body, then add to the physics world.
                 btDefaultMotionState* myMotionState = new btDefaultMotionState(groundTransform);
                 motionStates.push_back(myMotionState); // Store for cleanup
 
@@ -89,10 +92,12 @@ void World::GenerateSimplePlatform() {
                 btRigidBody* body = new btRigidBody(rbInfo);
                 rigidBodies.push_back(body); // Store for cleanup
 
-                this->physicsWorld->addRigidBody(body);
+                this->physicsWorld->addRigidBody(body); // Add to the physics simulation
             }
         }
     }
 }
 
-const std::vector<Brick>& World::GetBricks() const { return bricks; }
+const std::vector<Brick>& World::GetBricks() const { 
+    return bricks; 
+}

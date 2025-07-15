@@ -1,0 +1,43 @@
+#include "PhysicsWorld.h"
+
+PhysicsWorld::PhysicsWorld() {
+    collisionConfiguration = new btDefaultCollisionConfiguration();
+    dispatcher = new btCollisionDispatcher(collisionConfiguration);
+    overlappingPairCache = new btDbvtBroadphase();
+    solver = new btSequentialImpulseConstraintSolver();
+    dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher, overlappingPairCache, solver, collisionConfiguration);
+    dynamicsWorld->setGravity(btVector3(0, -9.81f, 0));
+}
+
+PhysicsWorld::~PhysicsWorld() {
+    // With raw pointers, we must manually delete in the reverse order of creation.
+    // Clean up all collision objects from the dynamics world before deleting the world itself
+    if (dynamicsWorld) {
+        for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
+            btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
+            btRigidBody* body = btRigidBody::upcast(obj);
+            if (body && body->getMotionState()) {
+                delete body->getMotionState();
+            }
+            dynamicsWorld->removeCollisionObject(obj);
+            delete obj; // Delete the collision object itself
+        }
+    }
+
+    delete dynamicsWorld;
+    dynamicsWorld = nullptr; // Set to nullptr after deletion
+    delete solver;
+    solver = nullptr;
+    delete overlappingPairCache;
+    overlappingPairCache = nullptr;
+    delete dispatcher;
+    dispatcher = nullptr;
+    delete collisionConfiguration;
+    collisionConfiguration = nullptr;
+}
+
+void PhysicsWorld::Step(float dt) {
+    if (dynamicsWorld) { // Add a null check for safety
+        dynamicsWorld->stepSimulation(dt, 10); // up to 10 substeps per frame
+    }
+}

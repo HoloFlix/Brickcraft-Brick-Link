@@ -1,8 +1,8 @@
 #pragma once
 
 #include <vector>
-#include "DataTypes.h"
-#include "btBulletDynamicsCommon.h" // Include for btDiscreteDynamicsWorld
+#include "DataTypes.h" // Assuming this contains your Brick struct
+#include "btBulletDynamicsCommon.h" // Include for btDiscreteDynamicsWorld, btCollisionShape, btDefaultMotionState, btRigidBody
 
 class World {
 public:
@@ -11,11 +11,14 @@ public:
     // Constructor to inject the physics world
     World(btDiscreteDynamicsWorld* dynamicsWorld);
 
+    // Destructor to clean up physics shapes and motion states created by this World
+    ~World();
+
     void GenerateSimplePlatform(); // Renamed from GeneratePlatform
     const std::vector<Brick>& GetBricks() const;
 
-    // Destructor to clean up physics shapes and motion states created by this World
-    ~World();
+    // Added Clear function for safe world regeneration
+    void Clear();
 
 private:
     std::vector<Brick> bricks;

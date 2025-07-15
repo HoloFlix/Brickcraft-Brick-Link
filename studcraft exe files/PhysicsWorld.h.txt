@@ -1,0 +1,22 @@
+#pragma once
+#include <btBulletDynamicsCommon.h>
+// #include <memory> // REMOVED: No longer using std::unique_ptr for dynamicsWorld
+
+class PhysicsWorld {
+public:
+    PhysicsWorld();
+    ~PhysicsWorld();
+
+    void Step(float dt);
+
+    // Changed to return raw pointer directly, as dynamicsWorld is now a raw pointer
+    btDiscreteDynamicsWorld* GetWorld() { return dynamicsWorld; }
+
+private:
+    btDefaultCollisionConfiguration* collisionConfiguration;
+    btCollisionDispatcher* dispatcher;
+    btBroadphaseInterface* overlappingPairCache;
+    btSequentialImpulseConstraintSolver* solver;
+    // Changed from std::unique_ptr to raw pointer
+    btDiscreteDynamicsWorld* dynamicsWorld;
+};

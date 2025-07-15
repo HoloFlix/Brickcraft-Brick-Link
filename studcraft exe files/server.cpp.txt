@@ -1,13 +1,13 @@
-#define _WINSOCKAPI_
+#define _WINSOCKAPI_ // ADDED: To resolve C4005 warning
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 #include "Server.h"
 #include "MessageIdentifiers.h"
 #include "BitStream.h"
 #include "GetTime.h"
-#include "btBulletDynamicsCommon.h"
+// #include "btBulletDynamicsCommon.h" // No longer needed directly here, PhysicsWorld encapsulates it
 #include <iostream>
-#include <algorithm>
+#include <algorithm> // For std::remove_if
 #include <vector>
 #include <windows.h> // For Sleep
 
@@ -16,41 +16,26 @@ const unsigned char ID_PLAYER_ACTION = 0x88;
 const unsigned char ID_PLAYER_STATES = 0x89;
 const unsigned char ID_PLAYER_DISCONNECT_NOTIFICATION = 0x90;
 
-// Server class constructor (Corrected)
+// Server class constructor
 Server::Server() :
     peer(nullptr),
     networkIdManager(nullptr),
-    dynamicsWorld(nullptr),
-    c_config(nullptr),
-    dispatcher(nullptr),
-    broadphase(nullptr),
-    solver(nullptr),
+    m_physicsWorld(nullptr), // Initialize raw pointer to nullptr
     world(nullptr) // Initialize world to nullptr FIRST
 {
-    // Physics initialization must happen here so dynamicsWorld is valid before World constructor
-    init_physics();
+    // NEW: Create the physics world
+    m_physicsWorld = new PhysicsWorld();
 
-    // Now that dynamicsWorld is valid, create the World object, passing it the physics world
-    world = new World(this->dynamicsWorld);
+    // Now that the physics world exists, create the game world,
+    // passing it the raw pointer to the dynamicsWorld obtained from PhysicsWorld.
+    world = new World(m_physicsWorld->GetWorld());
 }
 
 // Server class destructor
 Server::~Server() {
-    // Clean up players and their associated physics bodies
+    // Clean up players. The Player's destructor will handle its PlayerPhysics cleanup.
     for (size_t i = 0; i < players.size(); ++i) {
-        Player* p = players[i];
-        if (p) {
-            btRigidBody* b = p->GetPhysicsBody();
-            if (b) {
-                if (dynamicsWorld) {
-                    dynamicsWorld->removeRigidBody(b);
-                }
-                delete b->getMotionState();
-                delete b->getCollisionShape();
-                delete b;
-            }
-            delete p; // Delete the Player object itself
-        }
+        delete players[i]; // This triggers Player's destructor, cleaning up its physics object
     }
     players.clear();
 
@@ -58,8 +43,9 @@ Server::~Server() {
     delete world;
     world = nullptr;
 
-    // Cleanup physics components (only the core Bullet objects, not those managed by World)
-    deinit_physics();
+    // ADDED: Clean up the physics world (since it's a raw pointer now)
+    delete m_physicsWorld;
+    m_physicsWorld = nullptr; // Set to nullptr after deletion
 
     // Cleanup RakNet components
     if (peer) {
@@ -77,40 +63,6 @@ void Server::Startup(){
     world->GenerateSimplePlatform();
 
     std::cout << "[OK] Startup Complete\n";
-}
-
-void Server::init_physics(){
-    c_config = new btDefaultCollisionConfiguration();
-    dispatcher = new btCollisionDispatcher(c_config);
-    broadphase = new btDbvtBroadphase();
-    solver = new btSequentialImpulseConstraintSolver();
-    dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher,broadphase,solver,c_config);
-    dynamicsWorld->setGravity(btVector3(0,-10,0));
-}
-
-void Server::deinit_physics(){
-    if (dynamicsWorld) {
-        for (int i = dynamicsWorld->getNumCollisionObjects() - 1; i >= 0; i--) {
-            btCollisionObject* obj = dynamicsWorld->getCollisionObjectArray()[i];
-            btRigidBody* body = btRigidBody::upcast(obj);
-            if (body && body->getMotionState()) {
-                delete body->getMotionState();
-            }
-            dynamicsWorld->removeCollisionObject(obj);
-            delete obj;
-        }
-    }
-
-    delete dynamicsWorld;
-    dynamicsWorld = nullptr;
-    delete solver;
-    solver = nullptr;
-    delete broadphase;
-    broadphase = nullptr;
-    delete dispatcher;
-    dispatcher = nullptr;
-    delete c_config;
-    c_config = nullptr;
 }
 
 void Server::init_networking(){
@@ -165,7 +117,8 @@ void Server::Run(){
 
         RakNet::TimeMS currentTime = RakNet::GetTimeMS();
         if (currentTime - lastPhysicsTick >= physicsUpdateInterval) {
-            dynamicsWorld->stepSimulation(physicsUpdateInterval / 1000.f, 10);
+            // NEW: Step the physics world using the PhysicsWorld object
+            m_physicsWorld->Step(physicsUpdateInterval / 1000.f);
             send_player_states_to_all_clients();
             lastPhysicsTick = currentTime;
         }
@@ -193,75 +146,51 @@ void Server::send_world(RakNet::SystemAddress addr){
     peer->Send(&bs,HIGH_PRIORITY,RELIABLE_ORDERED,0,addr,false);
 }
 
+// --- REPLACE send_player_states_to_all_clients ---
 void Server::send_player_states_to_all_clients() {
-    if (players.empty()) {
-        return;
-    }
-
+    if (players.empty()) return;
     RakNet::BitStream bs;
     bs.Write(ID_PLAYER_STATES);
     bs.Write((unsigned int)players.size());
 
     for (size_t i = 0; i < players.size(); ++i) {
         Player* p = players[i];
-        if (p && p->GetPhysicsBody()) {
+        // Get the rigid body from the PlayerPhysics component
+        if (p && p->GetPhysics() && p->GetPhysics()->GetBody()) {
             btTransform t;
-            p->GetPhysicsBody()->getMotionState()->getWorldTransform(t);
+            p->GetPhysics()->GetBody()->getMotionState()->getWorldTransform(t);
             PlayerState ps;
             ps.guid = p->GetGUID();
             ps.position.x = t.getOrigin().x();
             ps.position.y = t.getOrigin().y();
             ps.position.z = t.getOrigin().z();
-            ps.rotation = t.getRotation(); // Also send rotation
+            ps.rotation = t.getRotation();
             bs.Write((char*)&ps, sizeof(PlayerState));
         }
     }
     peer->Send(&bs, HIGH_PRIORITY, UNRELIABLE_SEQUENCED, 0, RakNet::UNASSIGNED_SYSTEM_ADDRESS, true);
 }
 
-// NEW, CORRECTED create_player function
+// --- REPLACE create_player ---
 Player* Server::create_player(RakNet::RakNetGUID guid) {
     Player* p = new Player();
     p->SetGUID(guid);
-    p->SetNetworkIDManager(networkIdManager); // Set the NetworkIDManager
-
-    // Define the physics properties
-    btTransform initialTransform;
-    initialTransform.setIdentity();
-    initialTransform.setOrigin(btVector3(0,10,0));
-    btDefaultMotionState* myMotionState = new btDefaultMotionState(initialTransform);
-    btCollisionShape* playerShape = new btCapsuleShape(0.5f, 2.0f); // Capsule for player
-    btVector3 localInertia(0,0,0);
-    playerShape->calculateLocalInertia(1.0f, localInertia); // Mass 1.0f
-
-    btRigidBody::btRigidBodyConstructionInfo rbInfo(1.0f, myMotionState, playerShape, localInertia);
-    btRigidBody* body = new btRigidBody(rbInfo);
-
-    // This tells the physics engine: "This object can never go to sleep.
-    // It should always be active and affected by forces like gravity."
-    body->setActivationState(DISABLE_DEACTIVATION);
-
-    this->dynamicsWorld->addRigidBody(body);
-    p->SetPhysicsBody(body);
-    
+    p->SetNetworkIDManager(networkIdManager); // Still need to set the NetworkIDManager
+    p->CreatePhysics(m_physicsWorld->GetWorld(), 0, 10, 0); // Create physics component
     return p;
 }
 
+// --- REPLACE remove_player ---
 void Server::remove_player(RakNet::RakNetGUID guid) {
-    for (size_t i = 0; i < players.size(); ++i) {
-        if (players[i] && players[i]->GetGUID() == guid) {
-            btRigidBody* b = players[i]->GetPhysicsBody();
-            if (b) {
-                if (dynamicsWorld) {
-                    dynamicsWorld->removeRigidBody(b);
-                }
-                delete b->getMotionState();
-                delete b->getCollisionShape();
-                delete b;
+    // The Player's destructor will handle deleting the PlayerPhysics component.
+    // We just need to find the player and delete it from our vector.
+    players.erase(std::remove_if(players.begin(), players.end(),
+        // Explicitly specify 'bool' as the return type for the lambda
+        [&](Player* p) -> bool {
+            if (p && p->GetGUID() == guid) {
+                delete p; // This triggers Player's destructor, cleaning up its physics object
+                return true; // Returns true for removal
             }
-            delete players[i];
-            players.erase(players.begin() + i);
-            return;
-        }
-    }
+            return false; // Returns false, keep the element
+        }), players.end());
 }

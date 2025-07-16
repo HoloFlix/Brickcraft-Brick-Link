@@ -1,0 +1,16 @@
+#pragma once
+#include <btBulletDynamicsCommon.h>
+
+class PlayerPhysics {
+public:
+    PlayerPhysics(btDiscreteDynamicsWorld* world, float x, float y, float z);
+    ~PlayerPhysics();
+
+    btRigidBody* GetBody() { return body; }
+
+private:
+    btCollisionShape* shape;
+    btDefaultMotionState* motionState;
+    btRigidBody* body;
+    btDiscreteDynamicsWorld* world;
+};

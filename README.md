@@ -23,9 +23,6 @@ The project is now entering Phase 2, which shifts focus from patching the old en
   - An advanced Depth of Field (DoF) post-processing effect.
 - **Mapping the Network Protocol**: The server and client executables use the RakNet library. Initial analysis of the client's packet handler has provided a foundational map of the network Packet IDs.
 
-### III. Current Project Goal
-The primary goal of Phase 2 is to begin development of a new, custom server application that the original game client can connect to.
-
 ---
 
 ## The Brickcraft Engine - A Teardown
@@ -51,7 +48,7 @@ This guide is for developers who wish to create Lua mods using the un-patched, o
 
 ## I. The Unbreakable Rules of Lua Modding:
 
-Based on our research, the un-patched game engine has four hardcoded limitations:
+Based on research, the un-patched game engine has four hardcoded limitations:
 
 * **The API is Fixed:** The functions listed below are the *only* ones available.
 * **Items Cannot Be Unequipped:** `player:SetItem(nil)` will crash the server. Flight via the `/fly` command is a permanent, one-way action for that session.
@@ -74,7 +71,7 @@ Based on our research, the un-patched game engine has four hardcoded limitations
 
 * **Engine Architecture:** The world is orchestrated by a master CityGenerator class, which owns and manages a LegoWorldGenerator instance. This LegoWorldGenerator is the workhorse responsible for the core block manipulation functions (TryPlaceBrick, FillBlock).
 * **Data Storage:** The world is stored in a SQLite database (world.db) as a key-value store. The mapdata table contains chunk data, where the key is the chunk's coordinate string ("X,Y,Z") and the value is a binary BLOB.
-* **Data Compression (The Great Cipher):** The binary BLOBs are not standard ZLIB streams. They are processed by a proprietary StreamCompressor class which reads a custom 4-byte header (containing the uncompressed size) before passing the rest of the payload to the ZLIB uncompress function. This was your most critical discovery.
+* **Data Compression (The Great Cipher):** The binary BLOBs are not standard ZLIB streams. They are processed by a proprietary StreamCompressor class which reads a custom 4-byte header (containing the uncompressed size) before passing the rest of the payload to the ZLIB uncompress function.
 * **Rendering:** The client uses OpenGL, managed by SDL for windowing. The visual style is defined by a set of GLSL shaders that implement Phong lighting, fog, and advanced effects like a 1D texture-based color palette and Depth of Field post-processing.
 * **Networking:** All communication is handled by the RakNet library. We have already reverse-engineered the Packet IDs for the four most basic player actions (0x83 for Break, 0x85 for Color, 0x88 for Place/Select).
 * **Physics:** The server uses the open-source Bullet Physics Library, a known and well-documented standard. This is a massive advantage.
@@ -103,16 +100,11 @@ The original C++ game engine proved to be extremely fragile and fundamentally ho
 
 * **CREATE_SUSPENDED Flag Issues:** Our initial strategy involved launching the target process (e.g., Rex-Kwon-Do Server.exe) in a suspended state (CREATE_SUSPENDED) before injecting the DLL. However, it was discovered that the Rex-Kwon-Do Server.exe often acts as a launcher or stub that immediately spawns the client process when started in this suspended state. This meant injecting into the suspended server was often futile, as the client would appear, but the server logic wouldn't fully initialize or the server process would immediately close.
 
-* **Inconsistent Injection Targets:** There was confusion about whether to inject into the server or the client. It was definitively confirmed that the server (Rex-Kwon-Do Server.exe) must be the target for patching, as it drives the game's dynamic world and logic. Injecting into the client directly was deemed pointless without a connected server.
 
 * **Race Conditions in Hooking:** Even when injection seemed to work, we ran into race conditions where our hooks were placed after the target function had already executed during the server's startup sequence. This meant our custom code was never called, as the original function had already run, effectively bypassing our patch. Solutions attempting to inject into an already-running server were also complex and faced similar timing issues.
 
-* **RakNet API Mismatches / Outdated Functions:** When attempting to register new Lua functions by hooking luabind.dll, we found that some helper functions we expected to exist (like QueryConstruction_PeerToPeer or AutoManage on ReplicaManager3) did not exist in the period-correct RakNet library version we were using. This required manual re-implementation of core logic that RakNet usually abstracts.
-
 ### Compiler and Linker Conflicts
 * **Winsock War:** Frequent redefinition errors occurred due to conflicts between winsock.h (included by windows.h) and RakNet's requirement for winsock2.h. A global project fix using #define _WINSOCKAPI_ was needed, but its application across all files was complex.
-
-* **Circular Dependencies and Incomplete Types:** Architectural mistakes in header file design led to complex circular inclusion problems (e.g., Server.h includes World.h, World.h includes Player.h, and Player.h tries to include Server.h), causing the compiler to fail. This required a major restructuring, including the creation of a DataTypes.h file to consolidate common struct definitions.
 
 ## Limited Scope for Future Expansion
 Even if runtime patching were made stable, it would be inherently difficult to add entirely new features not present in the original prototype's architecture, such as completely new brick types with custom geometry or complex physics interactions, as modifications would be tied to a specific executable version.
@@ -120,7 +112,7 @@ Even if runtime patching were made stable, it would be inherently difficult to a
 ## Original Client's Own Instability
 Beyond server-side patching difficulties, the original Rex-Kwon-Do.exe client itself was found to be "buggy, unstable, and incomplete". Despite our new server's "perfect adherence to the reverse-engineered protocol," the client often got stuck in loops, froze, or sent duplicate packets, suggesting internal flaws that even a perfectly replicated server could not overcome. For example, it would sometimes send the 0x82 spawn confirmation packet twice, or stall out expecting a server heartbeat (0x29) that our server wasn't yet programmed to send (or was sending, but the client still crashed).
 
-## Conclusion: The Strategic Pivot
+## Conclusion:
 These accumulating challenges led to the crucial decision to pivot away from patching the original prototype and instead, begin building a new, custom server and client from scratch. This new phase, known as the "Studcraft" or "The Brickcraft Restoration Project," leverages the vast body of reverse-engineered knowledge gained during the patching attempts.
 
 The core insight was that debugging a broken original program through patching was less productive than using our comprehensive understanding of its architecture (including its network protocol, physics engine, and world generation) to build a stable, modern re-implementation. Our StudcraftServer and StudcraftClient are the results of this shift, offering a clean, open-source foundation for future development.

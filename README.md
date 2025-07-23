@@ -33,7 +33,7 @@ This document consolidates our complete *current* understanding of the prototype
 ### A. The Server
 - **World Engine**: The master class is a `CityGenerator` singleton, which contains a `LegoWorldGenerator` instance. All block placement logic is handled by the native C++ function `RKD::LegoWorldGenerator::TryPlaceBrick(...)`, which is our primary target for re-implementation.
 - **Player Data**:
-  - The player model is a simple stack of four 1x1 bricks, with the top brick having a different color to represent the "head" or camera position.
+  - The player model is a simple stack of four 2x2 bricks, with the top brick having a different color to represent the "head" or camera position.
   - Player inventory is managed by a native C++ `Inventory` class, but the functions to modify it (`AdjustNumBlocks`) were never exposed to Lua, preventing client-side hotbar updates from scripts.
 - **Scripting**: Uses a standard Lua 5.1 environment with a limited, fixed API bound via `luabind.dll`.
 

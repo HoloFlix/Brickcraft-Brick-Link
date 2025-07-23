@@ -80,7 +80,7 @@ Based on our research, the un-patched game engine has four hardcoded limitations
 
 ---
 
-## Brickcraft Patcher/Injector Tool: Research Insights and Strategic Pivot
+# Brickcraft Patcher/Injector Tool: Research Insights and Strategic Pivot
 
 For other developers and reverse engineers looking to create their own patcher/injector tool for the original Brickcraft client and server, our extensive research has provided clear insights into what has been attempted, the challenges encountered, and ultimately, what did not work, leading us to a strategic pivot.
 

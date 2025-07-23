@@ -78,8 +78,10 @@ Based on our research, the un-patched game engine has four hardcoded limitations
 * **Physics:** The server uses the open-source Bullet Physics Library, a known and well-documented standard. This is a massive advantage.
 * **Scripting:** The game uses luabind to expose a limited set of C++ functions to a Lua 5.1 scripting engine. We have proven that this API is fixed and cannot be extended without modifying the C++ executable.
 
+---
 
 ## Brickcraft Patcher/Injector Tool: Research Insights and Strategic Pivot
+
 For other developers and reverse engineers looking to create their own patcher/injector tool for the original Brickcraft client and server, our extensive research has provided clear insights into what has been attempted, the challenges encountered, and ultimately, what did not work, leading us to a strategic pivot.
 
 ## Initial Goals and Early Successes
@@ -94,7 +96,7 @@ The game's native Lua API was found to be highly restrictive. Crucial functional
 ## Engine Instability and Fragility
 The original C++ game engine proved to be extremely fragile and fundamentally hostile to runtime modification. Attempts to inject code or place hooks often resulted in server crashes or silent bypasses. This indicated fundamental incompatibilities with modern patching techniques.
 
-## Persistent Technical Roadblocks during Injection
+### Persistent Technical Roadblocks during Injection
 * **Silent Crashes Post-Injection:** We frequently encountered scenarios where the injector reported success, but the server would immediately crash silently upon DLL loading, often before any custom MessageBox or log messages could be displayed. This pointed to fundamental incompatibilities between our modern C++ compiler/toolchain and the game's old, fragile C++ code, particularly concerning function hooking.
 
 * **CREATE_SUSPENDED Flag Issues:** Our initial strategy involved launching the target process (e.g., Rex-Kwon-Do Server.exe) in a suspended state (CREATE_SUSPENDED) before injecting the DLL. However, it was discovered that the Rex-Kwon-Do Server.exe often acts as a launcher or stub that immediately spawns the client process when started in this suspended state. This meant injecting into the suspended server was often futile, as the client would appear, but the server logic wouldn't fully initialize or the server process would immediately close.
@@ -105,7 +107,7 @@ The original C++ game engine proved to be extremely fragile and fundamentally ho
 
 * **RakNet API Mismatches / Outdated Functions:** When attempting to register new Lua functions by hooking luabind.dll, we found that some helper functions we expected to exist (like QueryConstruction_PeerToPeer or AutoManage on ReplicaManager3) did not exist in the period-correct RakNet library version we were using. This required manual re-implementation of core logic that RakNet usually abstracts.
 
-## Compiler and Linker Conflicts
+### Compiler and Linker Conflicts
 * **Winsock War:** Frequent redefinition errors occurred due to conflicts between winsock.h (included by windows.h) and RakNet's requirement for winsock2.h. A global project fix using #define _WINSOCKAPI_ was needed, but its application across all files was complex.
 
 * **Circular Dependencies and Incomplete Types:** Architectural mistakes in header file design led to complex circular inclusion problems (e.g., Server.h includes World.h, World.h includes Player.h, and Player.h tries to include Server.h), causing the compiler to fail. This required a major restructuring, including the creation of a DataTypes.h file to consolidate common struct definitions.

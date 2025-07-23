@@ -1,4 +1,4 @@
-*This was summarized using notebook llm
+*This text was summarized using notebook llm
 
 # Brickcraft (2012 Prototype) 
 

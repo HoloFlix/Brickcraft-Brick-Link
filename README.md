@@ -1,3 +1,5 @@
+*This was summarized using notebook llm
+
 # Brickcraft (2012 Prototype) 
 
 ## Overall Development Progress & Project Status

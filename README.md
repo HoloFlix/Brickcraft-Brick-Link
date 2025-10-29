@@ -1,118 +1,116 @@
-*This text was summarized using notebook llm
+# Brick-Link: ImGui Debug Console for Brickcraft
 
-# Brickcraft (2012 Prototype) 
+**Brick-Link** is an open-source proof-of-concept modding toolkit for *Brickcraft* (a leaked prototype of a LEGO-themed Minecraft sandbox game, internally codenamed "Rex-Kwon-Do"). It provides a DLL injector, runtime patcher, and a user-friendly Mod Manager GUI to inject an ImGui-based debug console into the game client and server. 
 
-## Overall Development Progress & Project Status
+The console allows for basic command execution over the network (client-to-server), with hooks for logging decompressed world data. **This is an early prototype—features like full console functionality are a work-in-progress (WIP). Use at your own risk!**
 
-**Project**: Brick-Kwon-Do  
-**Current Status**: Phase 2 - C++ Engine Re-implementation & Tooling  
+## Features
+- **Mod Manager GUI**: A standalone SDL2/OpenGL app with ImGui for easy configuration, file browsing, and one-click launching/injection of the client and server.
+- **DLL Injector**: Command-line tool (`Injector.exe`) for manual DLL injection into running processes.
+- **Patcher DLL**: Core runtime hooks using MinHook for:
+  - ImGui overlay console (toggle with F2).
+  - Network command forwarding (client sends commands to server via RakNet).
+  - Optional logging of decompressed world data (client/server).
+  - Mouse mode toggling for seamless gameplay.
+- **Server-Side Hooks**: Intercepts incoming packets to execute commands in the game engine.
+- **Configurable Logging**: Thread-safe debug logs to `brick-link-client.log` or `brick-link-server.log`.
+- **Cross-Process Support**: Handles both client (`Rex-Kwon-Do.exe`) and server (`Rex-Kwon-Do Server.exe`).
 
-### I. Project Summary
-This project was initiated to explore and overcome the modding limitations of the 2012 Brickcraft prototype. Phase 1, which focused on Lua scripting and external C++ runtime patching, has been concluded. Extensive testing definitively proved that the prototype's engine architecture is fundamentally resistant to stable, complex runtime modification.
+## Requirements
+- **OS**: Windows 10/11 (32-bit target for compatibility with the game).
+- **Game Files**: Legally obtained *Brickcraft* prototype (`Rex-Kwon-Do.exe` and `Rex-Kwon-Do Server.exe`).
+- **Build Tools** (if compiling):
+  - CMake 3.10+.
+  - Visual Studio 2019+ (with C++ workload) or MinGW.
+- **Runtime Dependencies** (included in releases):
+  - Vendor libs: MinHook, ImGui, SDL2, GLEW.
+  - Game DLLs: `RakNet.dll`, `SDL.dll` (assumed present in game dir).
 
-The project is now entering Phase 2, which shifts focus from patching the old engine to re-implementing it.
+No internet required—everything is offline.
 
-### II. Major Accomplishments (The Foundational Knowledge)
-- **Complete Lua API Mapping**: The original server-side Lua API has been fully mapped, and its hard limitations (no access to position, native inventory, or view direction) have been definitively proven.
-- **Discovery of the Core World Engine**: The `CityGenerator` and `LegoWorldGenerator` classes have been identified as the heart of world creation. Crucial functions like `TryPlaceBrick` and `FillBlock` have been located, providing the exact blueprints for block manipulation.
-- **Identification of the Physics Engine**: The server uses the open-source Bullet Physics Library. This is a monumental discovery, as it means we can use existing public documentation to replicate the game's physics instead of reverse-engineering them from scratch.
-- **Deconstruction of the Rendering Pipeline**: The client-side GLSL shaders have been acquired. Analysis reveals a sophisticated rendering engine for its time, featuring:
-  - Phong lighting for realistic surface shading.
-  - A 1D lookup texture for a global color palette.
-  - Custom effects like brick edge highlighting.
-  - An advanced Depth of Field (DoF) post-processing effect.
-- **Mapping the Network Protocol**: The server and client executables use the RakNet library. Initial analysis of the client's packet handler has provided a foundational map of the network Packet IDs.
+## Quick Start
+1. **Download**: Grab the latest release from [Releases](https://github.com/yourusername/Brick-Link/releases).
+2. **Extract**: Unzip to a folder (e.g., `C:\Brick-Link`).
+3. **Configure Paths**:
+   - Run `ModManager.exe`.
+   - Set paths to your `Rex-Kwon-Do.exe`, `Rex-Kwon-Do Server.exe`, and the included `Patcher.dll`.
+   - Enable logging options if desired (saves to `patch_config.ini`).
+4. **Launch**:
+   - Click **Launch & Patch BOTH** to start the server, inject the patcher, then launch/inject the client.
+   - In-game: Press **F2** to toggle the ImGui console.
+5. **Test Commands**: Type a command (e.g., game-specific like `/give brick`) and hit Enter or "Run". It sends via RakNet for server execution.
+
+For manual injection: Run `Injector.exe "Rex-Kwon-Do.exe"` (after starting the process).
+
+## Building from Source
+The project uses CMake for cross-platform builds. Vendor libraries (MinHook, ImGui, SDL2, GLEW) are included in `/vendor`.
+
+### Steps
+1. **Clone Repo**:
+   ```
+   git clone https://github.com/yourusername/Brickcraft-Brick-Link.git
+   cd Brick-Link
+   ```
+
+2. **Generate Build Files**:
+   - Open a terminal in the root dir.
+   - Run:
+     ```
+     mkdir build && cd build
+     cmake .. -A Win32  # Forces 32-bit for game compatibility
+     ```
+
+3. **Build**:
+   - Visual Studio: Open `Brick-Link.sln` in VS and build (Release/x86).
+   - Command-line:
+     ```
+     cmake --build . --config Release
+     ```
+
+4. **Output**: Binaries in `build/bin/` (e.g., `Injector.exe`, `Patcher.dll`, `ModManager.exe`).
+   - DLLs like `SDL2.dll` are auto-copied by CMake.
+
+**Notes**:
+- Ensure `/vendor` is intact—do not delete.
+- For custom vendors: Update paths in subproject `CMakeLists.txt` files.
+
+## Usage
+### Mod Manager GUI
+- **Paths Section**: Browse for executables and `Patcher.dll`.
+- **Patch Options**: Toggle logging for world data decompression (useful for modding analysis).
+- **Launch Button**: Starts server first (with 500ms delay), then client. Injection happens automatically in suspended mode for reliability.
+
+### Injector CLI
+```
+Injector.exe "Rex-Kwon-Do.exe"
+```
+- Finds PID by process name.
+- Injects `Patcher.dll` (must be in same dir).
+- Run as Admin if access denied.
+
+### In-Game Console
+- **Toggle**: F2 (hides/shows overlay; restores mouse control).
+- **Commands**: Enter text and Run/Enter. Sent as `ID_PLAYER_ACTION_PACKET` (136) via RakNet.
+- **Status**: Shows "Connected" when RakPeer is captured.
+
+### Logging
+- Client: `brick-link-client.log` (in game dir).
+- Server: `brick-link-server.log`.
+- Use DebugView (Sysinternals) for real-time `OutputDebugString` output.
+
+## Known Issues & Limitations
+- **Console WIP**: Command parsing/execution is basic—only forwards strings to server `RunLine`. No validation or feedback yet.
+- **Compatibility**: Tested on Brickcraft (Jun 28, 2012 prototype).
+- **RakNet Hacks**: Relies on mangled names (e.g., `?Write@BitStream@RakNet@@QAEXQBD@Z`). If exports change, rebuild with pattern scanning.
+- **No Multiplayer Beyond Local**: Assumes loopback; remote servers untested.
+- **Performance**: ImGui hooks add minor overhead—disable for production play.
+- **32-Bit Only**: Matches game arch; no x64 support.
+
+## Troubleshooting
+- **Injection Fails**: Run as Admin. Ensure game is 32-bit and not anti-cheat protected.
+- **No Overlay**: Check if `opengl32.dll` and `SDL.dll` load. Verify hooks in logs.
+- **RakNet Errors**: Confirm `RakNet.dll` exports match (use Dependency Walker).
+- **Build Errors**: Missing vendors? Re-clone. CMake warnings? Ignore non-critical.
+- **Crashes**: Disable logging first. Use VS debugger on `Patcher.dll`.
 
 ---
-
-## The Brickcraft Engine - A Teardown
-
-This document consolidates our complete *current* understanding of the prototype's architecture.
-
-### A. The Server
-- **World Engine**: The master class is a `CityGenerator` singleton, which contains a `LegoWorldGenerator` instance. All block placement logic is handled by the native C++ function `RKD::LegoWorldGenerator::TryPlaceBrick(...)`, which is our primary target for re-implementation.
-- **Player Data**:
-  - The player model is a simple stack of four 2x2 bricks, with the top brick having a different color to represent the "head" or camera position.
-  - Player inventory is managed by a native C++ `Inventory` class, but the functions to modify it (`AdjustNumBlocks`) were never exposed to Lua, preventing client-side hotbar updates from scripts.
-- **Scripting**: Uses a standard Lua 5.1 environment with a limited, fixed API bound via `luabind.dll`.
-
-### B. The Client
-- **Rendering**: The client is a 32-bit OpenGL application using SDL for windowing. All visuals are controlled by a surprisingly advanced set of GLSL shaders that handle lighting, fog, color, and post-processing effects like Depth of Field. The game's distinct aesthetic can be fully replicated by studying these shader files.
-- **UI**: The user interface is rendered by Autodesk's Scaleform GFx middleware, which interprets `.swf` (Adobe Flash) files. Reverse-engineering revealed that the UI has minimal scripting; its logic is almost certainly driven by C++ code within the client, making UI modifications without a new client nearly impossible.
-
----
-
-# Brickcraft Lua Modding Guide (Definitive Edition)
-
-This guide is for developers who wish to create Lua mods using the un-patched, original game server.
-
-## I. The Unbreakable Rules of Lua Modding:
-
-Based on research, the un-patched game engine has four hardcoded limitations:
-
-* **The API is Fixed:** The functions listed below are the *only* ones available.
-* **Items Cannot Be Unequipped:** `player:SetItem(nil)` will crash the server. Flight via the `/fly` command is a permanent, one-way action for that session.
-* **Many Native Behaviors are Unstoppable:** The default "hover" effect of the Jetpack is coded in C++ and cannot be turned off from Lua while the item is equipped.
-* **The Physics Engine is Fragile:** Applying large forces via `PushPlayer` will cause players to clip through the terrain. All forces must be small and gentle.
-
-## II. The Definitive Lua API:
-
-* **Player:** `:PushPlayer(vector)`, `:SetItem(item)`, `:GetGuidAsInteger()`, `:GetName()`
-* **ServerCommander:** All functions for creating commands are stable.
-* **EntityManager:** The `.Players` iterator is stable.
-* **JetPack:** The `JetPack()` constructor returns a working item.
-
-## III. Feasible "Vanilla" Lua Mods:
-
-* **Physics-Based Tools:** A `/hop` command with a very small upward force, or a `/nudge` command that applies a tiny force to another player.
-* **Server-Side Economy:** A virtual economy can be tracked entirely in Lua tables, with commands like `/givecredits <player> <amount>`. This will have no in-game visual representation.
-* **The One-Way Jetpack:** A stable command that permanently equips the Jetpack.
-
-
-* **Engine Architecture:** The world is orchestrated by a master CityGenerator class, which owns and manages a LegoWorldGenerator instance. This LegoWorldGenerator is the workhorse responsible for the core block manipulation functions (TryPlaceBrick, FillBlock).
-* **Data Storage:** The world is stored in a SQLite database (world.db) as a key-value store. The mapdata table contains chunk data, where the key is the chunk's coordinate string ("X,Y,Z") and the value is a binary BLOB.
-* **Data Compression (The Great Cipher):** The binary BLOBs are not standard ZLIB streams. They are processed by a proprietary StreamCompressor class which reads a custom 4-byte header (containing the uncompressed size) before passing the rest of the payload to the ZLIB uncompress function.
-* **Rendering:** The client uses OpenGL, managed by SDL for windowing. The visual style is defined by a set of GLSL shaders that implement Phong lighting, fog, and advanced effects like a 1D texture-based color palette and Depth of Field post-processing.
-* **Networking:** All communication is handled by the RakNet library. We have already reverse-engineered the Packet IDs for the four most basic player actions (0x83 for Break, 0x85 for Color, 0x88 for Place/Select).
-* **Physics:** The server uses the open-source Bullet Physics Library, a known and well-documented standard. This is a massive advantage.
-* **Scripting:** The game uses luabind to expose a limited set of C++ functions to a Lua 5.1 scripting engine. We have proven that this API is fixed and cannot be extended without modifying the C++ executable.
-
----
-
-# Brickcraft Patcher/Injector Tool: Research Insights and Strategic Pivot
-
-For other developers and reverse engineers looking to create their own patcher/injector tool for the original Brickcraft client and server, our extensive research has provided clear insights into what has been attempted, the challenges encountered, and ultimately, what did not work, leading us to a strategic pivot.
-
-## Initial Goals and Early Successes
-Our project initially aimed to mod the unreleased 2012 Brickcraft prototype by extending its capabilities through its native Lua scripting API and later, through C++ runtime patching and injection. We successfully developed a functional C++ injector (BrickcraftInjector.exe) and a patcher DLL (BrickcraftPatcher.dll). This tooling was proven to successfully hook into the live server process without causing instability in a basic sense. A Mod Manager GUI prototype (BrickcraftModManager) was even created, demonstrating a working interface to launch the server and trigger the injection process.
-
-## Why Patching the Original Engine Proved Unviable: A Comprehensive Breakdown
-Despite these initial successes and significant effort, the approach of patching the original engine was definitively concluded to be a "dead end" for stable, complex modding. Here's a detailed explanation of why this path was abandoned:
-
-## Lua API Limitations
-The game's native Lua API was found to be highly restrictive. Crucial functionalities like direct player position control, native inventory management, and view direction were not exposed to Lua. This meant that even if a mod could inject Lua code, it couldn't achieve "Minecraft-level mods" without deeper engine access. Basic Lua modding was insufficient to manipulate core gameplay mechanics or create truly new features like custom classes without complex debugging.
-
-## Engine Instability and Fragility
-The original C++ game engine proved to be extremely fragile and fundamentally hostile to runtime modification. Attempts to inject code or place hooks often resulted in server crashes or silent bypasses. This indicated fundamental incompatibilities with modern patching techniques.
-
-### Persistent Technical Roadblocks during Injection
-* **Silent Crashes Post-Injection:** We frequently encountered scenarios where the injector reported success, but the server would immediately crash silently upon DLL loading, often before any custom MessageBox or log messages could be displayed. This pointed to fundamental incompatibilities between our modern C++ compiler/toolchain and the game's old, fragile C++ code, particularly concerning function hooking.
-
-* **CREATE_SUSPENDED Flag Issues:** Our initial strategy involved launching the target process (e.g., Rex-Kwon-Do Server.exe) in a suspended state (CREATE_SUSPENDED) before injecting the DLL. However, it was discovered that the Rex-Kwon-Do Server.exe often acts as a launcher or stub that immediately spawns the client process when started in this suspended state. This meant injecting into the suspended server was often futile, as the client would appear, but the server logic wouldn't fully initialize or the server process would immediately close.
-
-
-* **Race Conditions in Hooking:** Even when injection seemed to work, we ran into race conditions where our hooks were placed after the target function had already executed during the server's startup sequence. This meant our custom code was never called, as the original function had already run, effectively bypassing our patch. Solutions attempting to inject into an already-running server were also complex and faced similar timing issues.
-
-### Compiler and Linker Conflicts
-* **Winsock War:** Frequent redefinition errors occurred due to conflicts between winsock.h (included by windows.h) and RakNet's requirement for winsock2.h. A global project fix using #define _WINSOCKAPI_ was needed, but its application across all files was complex.
-
-## Limited Scope for Future Expansion
-Even if runtime patching were made stable, it would be inherently difficult to add entirely new features not present in the original prototype's architecture, such as completely new brick types with custom geometry or complex physics interactions, as modifications would be tied to a specific executable version.
-
-## Original Client's Own Instability
-Beyond server-side patching difficulties, the original Rex-Kwon-Do.exe client itself was found to be "buggy, unstable, and incomplete". Despite our new server's "perfect adherence to the reverse-engineered protocol," the client often got stuck in loops, froze, or sent duplicate packets, suggesting internal flaws that even a perfectly replicated server could not overcome. For example, it would sometimes send the 0x82 spawn confirmation packet twice, or stall out expecting a server heartbeat (0x29) that our server wasn't yet programmed to send (or was sending, but the client still crashed).
-
-## Conclusion:
-These accumulating challenges led to the crucial decision to pivot away from patching the original prototype and instead, begin building a new, custom server and client from scratch. This new phase, known as the "Studcraft" or "The Brickcraft Restoration Project," leverages the vast body of reverse-engineered knowledge gained during the patching attempts.
-
-The core insight was that debugging a broken original program through patching was less productive than using our comprehensive understanding of its architecture (including its network protocol, physics engine, and world generation) to build a stable, modern re-implementation. Our StudcraftServer and StudcraftClient are the results of this shift, offering a clean, open-source foundation for future development.
